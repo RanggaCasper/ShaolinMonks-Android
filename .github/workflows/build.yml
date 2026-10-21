@@ -1,7 +1,7 @@
 # Builds the APK; for each v* tag, also publishes a release. Run by hand (Actions > Build > Run workflow), it only
 # uploads the APK as an artifact. The recompiler needs default.xbe: ci/default.xbe.enc, decrypted with the XBE_KEY
 # secret. To make it, from Git Bash at the repo root:
-#   openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -in assets/default.xbe -out ci/default.xbe.enc -pass pass:<key>
+#   openssl enc -aes-256-cbc -md sha256 -pbkdf2 -iter 200000 -salt -in assets/default.xbe -out ci/default.xbe.enc -pass pass:<key>
 #
 # Secrets: XBE_KEY (the passphrase of ci/default.xbe.enc), KEYSTORE_BASE64 (the release .jks in base64),
 # KEYSTORE_PASSWORD, KEY_ALIAS and KEY_PASSWORD. Without the keystore the APK has a debug signature.
@@ -53,8 +53,9 @@ jobs:
           # through a file: Git Bash rewrites an environment value that looks like a path (the key may start with /)
           # before a Windows program such as openssl sees it
           key="$RUNNER_TEMP/xbe.key"
-          printf '%s' "$XBE_KEY" > "$key"
-          openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -in ci/default.xbe.enc -out assets/default.xbe -pass "file:$key"
+          # no line ending: a key saved on Windows can carry a CR that the secret then keeps
+          printf '%s' "$XBE_KEY" | tr -d '\r\n' > "$key"
+          openssl enc -d -aes-256-cbc -md sha256 -pbkdf2 -iter 200000 -in ci/default.xbe.enc -out assets/default.xbe -pass "file:$key"
           rm -f "$key"
           # the one supported image: anything else recompiles to a broken game
           sha=$(sha1sum assets/default.xbe | cut -d' ' -f1)
