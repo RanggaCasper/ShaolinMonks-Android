@@ -17,6 +17,7 @@
 
 #include "app/app.h"
 #include "audio/output.h"
+#include "common/aspect.h"
 #include "common/keys.h"
 #include "common/menu.h"
 #include "common/mouse_keyboard.h"
@@ -227,7 +228,7 @@ enum RowId { kRenderResolution, kMaxFps, kVsync, kFpsCounter, kAniso, kReloadBlu
              kFmvScale, kGyro, kGyroSensitivity, kTouchLayout, kTouchOpacity, kTouchSize, kTouchEdit,
              kInfiniteAmmo, kRapidFire, kNoRecoil, kGameSpeed, kGodMode, kOneHitKill, kInfiniteGrenades,
              kCheckUpdates, kTouchSensitivity, kUnlockCharacters, kPs2Buttons,
-             kUnlockExtras, kInfiniteFatality, kMaxExperience, kMaxHealth, kMaxMana };
+             kUnlockExtras, kInfiniteFatality, kMaxExperience, kMaxHealth, kMaxMana, kAspectRatio };
 
 using rows::Kind;
 using rows::Row;
@@ -236,6 +237,7 @@ using rows::Row;
 constexpr Row kGraphicsRows[] = {
     {Kind::Heading, -1, "DISPLAY"},
     {Kind::Value, kRenderResolution, "RENDER RESOLUTION"},
+    {Kind::Value, kAspectRatio, "ASPECT RATIO"},
     {Kind::Heading, -1, "PERFORMANCE"},
     {Kind::Value, kVsync, "VERTICAL SYNC"},
     {Kind::Value, kMaxFps, "MAX FRAME RATE"},
@@ -338,6 +340,19 @@ bool StepDisplayRow(int id, int step, Settings& s, char (&text)[64]) {
             Mode out = Output();
             std::snprintf(text, sizeof(text), "%u%% (%ux%u)", s.render_percent, out.width * s.render_percent / 100,
                           out.height * s.render_percent / 100);
+            return true;
+        }
+        case kAspectRatio: {
+            // 1:1 to the whole screen, an unknown saved value the whole screen's
+            constexpr int count = int(std::size(game::kAspects));
+            int i = count - 1;
+            for (int j = 0; j < count; j++)
+                if (game::kAspects[j].code == o.aspect_ratio) i = j;
+            if (step) {
+                i = StepIndex(i, step, count);
+                o.aspect_ratio = game::kAspects[i].code;
+            }
+            std::snprintf(text, sizeof(text), "%s", game::kAspects[i].name);
             return true;
         }
         case kFmvScale:

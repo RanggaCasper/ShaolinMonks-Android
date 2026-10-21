@@ -25,6 +25,7 @@
 
 #include "app/app.h"
 #include "build_info.h"
+#include "common/aspect.h"
 #include "core/input.h"
 #include "core/log.h"
 #include "host.h"
@@ -234,8 +235,8 @@ Mode Output() {
 }
 
 bool Widescreen() {
-    Mode m = Output();
-    return m.width * 2 >= m.height * 3;  // 3:2 or wider
+    // the frame's shape as the aspect ratio setting has it: the game reads this at boot
+    return game::Aspect() >= 1.5f;  // 3:2 or wider
 }
 
 float RenderScale(uint32_t guest_height) {
