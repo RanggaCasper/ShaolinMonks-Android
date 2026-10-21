@@ -80,6 +80,9 @@ adb install -r app/build/outputs/apk/release/app-release.apk
 
 The SDK is vendored in `sdk/`, at the upstream commit in `sdk/UPSTREAM_COMMIT`, with one change: the console's language comes from `app::ConsoleLanguage()` (`sdk/runtime/kernel/xboxkrnl.cpp`).
 
+## Support
+If you'd like to support the project, you can do so on [SociaBuzz](https://sociabuzz.com/racas/tribe).
+
 ## Credits
 - [XboxXBE-Recomp](https://github.com/TGP482/XboxXBE-Recomp) by TGP482: the static recompiler and the portable runtime (Xbox kernel, XDK libraries and Direct3D 8) this port is built on.
 - [Black-Android](https://github.com/RanggaCasper/Black-Android) by RanggaCasper: the Android host this port is built from.
