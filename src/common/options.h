@@ -44,6 +44,7 @@ struct Options {
     bool max_mana = false;  // cheat: the mana bar at its longest, every level of it
     bool max_health = false;  // cheat: every health upgrade, the health bar at its longest
     bool max_experience = false;  // cheat: the players' experience at its most, every move to buy
+    bool skip_cutscenes = false;  // cheat: any cinematic and film can be skipped, seen or not, src/game/cheats.cpp
     bool unlock_extras = false;  // cheat: every unlockable of the Kontent menu (art, films, costumes, arenas)
     bool ps2_buttons = false;  // the touch controls and the game's button prompts show the PS2's buttons
     std::map<std::string, std::string> keys;  // action id to key names, absent is the default

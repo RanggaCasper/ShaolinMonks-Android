@@ -228,7 +228,7 @@ enum RowId { kRenderResolution, kMaxFps, kVsync, kFpsCounter, kAniso, kReloadBlu
              kFmvScale, kGyro, kGyroSensitivity, kTouchLayout, kTouchOpacity, kTouchSize, kTouchEdit,
              kInfiniteAmmo, kRapidFire, kNoRecoil, kGameSpeed, kGodMode, kOneHitKill, kInfiniteGrenades,
              kCheckUpdates, kTouchSensitivity, kUnlockCharacters, kPs2Buttons,
-             kUnlockExtras, kInfiniteFatality, kMaxExperience, kMaxHealth, kMaxMana, kAspectRatio };
+             kUnlockExtras, kInfiniteFatality, kMaxExperience, kMaxHealth, kMaxMana, kAspectRatio, kSkipCutscenes };
 
 using rows::Kind;
 using rows::Row;
@@ -262,6 +262,7 @@ constexpr Row kGeneralRows[] = {
     {Kind::Heading, -1, "CHEATS"},
     {Kind::Value, kUnlockCharacters, "UNLOCK ALL CHARACTERS"},
     {Kind::Value, kUnlockExtras, "UNLOCK ALL KONTENT"},
+    {Kind::Value, kSkipCutscenes, "SKIP ANY CUTSCENE"},
     {Kind::Value, kGodMode, "GOD MODE"},
     {Kind::Value, kOneHitKill, "ONE-HIT KILL"},
     {Kind::Value, kMaxHealth, "MAX HEALTH UPGRADES"},
@@ -317,6 +318,7 @@ bool* ToggleFlag(Settings& s, int id) {
         case kMaxExperience: return &o.max_experience;
         case kMaxHealth: return &o.max_health;
         case kMaxMana: return &o.max_mana;
+        case kSkipCutscenes: return &o.skip_cutscenes;
         default: return nullptr;
     }
 }

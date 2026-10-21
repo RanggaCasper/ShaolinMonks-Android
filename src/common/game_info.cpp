@@ -91,6 +91,7 @@ const app::GameInfo app::kGame = {
                 {"one_hit_kill", &game::Opt().one_hit_kill, nullptr},
                 {"max_health", &game::Opt().max_health, nullptr},
                 {"ps2_buttons", &game::Opt().ps2_buttons, nullptr},
+                {"skip_cutscenes", &game::Opt().skip_cutscenes, nullptr},
                 {"audio_output", nullptr, &game::Opt().audio_output},
                 {"aspect_ratio", nullptr, &game::Opt().aspect_ratio}},
     .load = game::Load,

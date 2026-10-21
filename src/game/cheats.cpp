@@ -288,6 +288,22 @@ void MaxExperience() {
     }
 }
 
+// ---- the cutscenes
+
+// The cinematics' skip (ButtonThrough, 0x036580 and 0x0363E0) takes the button only for one in the history of those
+// seen (0x036140, the list at 0x588260), or with this debug byte set, which no code writes
+constexpr uint32_t kSkipUnseen = 0x514376;
+// The films' frame (0x128CC0) takes start or A from the 10th frame, from the 300th with this set: the boot's films and
+// the story's endings (0x0C5AEB, 0x0CF32A) set it around their play, which runs presents, so clearing it at each lets
+// them go at the 10th too
+constexpr uint32_t kFilmHoldSkip = 0x639648;
+
+void SkipCutscenes() {
+    bool on = Opt().skip_cutscenes;
+    G<uint8_t>(kSkipUnseen) = on ? 1 : 0;
+    if (on) W32(kFilmHoldSkip, 0);
+}
+
 }  // namespace
 
 // at every present, game thread
@@ -299,6 +315,7 @@ void ApplyCheats() {
     if (Opt().infinite_fatality || Opt().max_mana)
         for (uint32_t n = 1; n <= 2; n++) Mana(n, Opt().max_mana, Opt().infinite_fatality);
     if (Opt().max_experience) MaxExperience();
+    SkipCutscenes();
 }
 
 }  // namespace game
