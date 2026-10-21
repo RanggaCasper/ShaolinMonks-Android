@@ -3,6 +3,10 @@ An unofficial native Android port of the original Xbox version of *Mortal Kombat
 
 The game's x86 code is statically recompiled ahead of time to C++ with [XboxXBE-Recomp](https://github.com/TGP482/XboxXBE-Recomp), then built for arm64. Drawing goes through Vulkan, and windowing, input and audio through SDL3. No emulator is involved. The Android host (Vulkan renderer, DirectSound, touch controls, settings panel) comes from [Black-Android](https://github.com/RanggaCasper/Black-Android).
 
+[![Gameplay on a Xiaomi Pad 7 at 60 FPS](https://img.youtube.com/vi/_NjKztafI74/maxresdefault.jpg)](https://youtu.be/_NjKztafI74)
+
+*Gameplay on a Xiaomi Pad 7 at 60 FPS ([watch on YouTube](https://youtu.be/_NjKztafI74)).*
+
 > [!NOTE]
 > This project does not include any game assets. You must provide the files from your own legally acquired copy of the game to install or build.
 
