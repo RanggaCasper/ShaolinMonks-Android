@@ -241,6 +241,7 @@ bool Widescreen() {
 
 float RenderScale(uint32_t guest_height) {
     float h = Output().height * (Get().render_percent / 100.0f);
+    if (game::Opt().anti_aliasing == game::kAaSsaa) h *= 2.0f;  // the presenter averages it back down
     return guest_height ? std::max(h / guest_height, 0.1f) : 1.0f;
 }
 

@@ -75,6 +75,102 @@ float4 psmain(O i) : SV_Target {
 }
 )";
 
+// the present with the screen filter or anti-aliasing the player chose: the blit's, then post.x a filter (1 sharpen,
+// 2 vivid, 3 scanlines, 4 CRT) and post.y FXAA; src.xy a texel, src.z the frame's lines
+const char* kPresentHlsl = R"(
+cbuffer B : register(b1) { float4 uvrect; float4 opts; float4 src; float4 post; };
+Texture2D img : register(t0);
+Texture2D lut : register(t1);
+SamplerState ls : register(s0);
+SamplerState ps : register(s1);
+struct O { float4 p : SV_Position; float2 uv : TEXCOORD0; };
+O vs(uint id : SV_VertexID) {
+    O o;
+    float2 t = float2((id << 1) & 2, id & 2);
+    o.p = float4(t * float2(2, -2) + float2(-1, 1), 0, 1);
+    o.uv = uvrect.xy + t * uvrect.zw;
+    return o;
+}
+float Luma(float3 c) { return dot(c, float3(0.299, 0.587, 0.114)); }
+float3 Tap(float2 uv) { return img.SampleLevel(ls, uv, 0).rgb; }
+// FXAA's console form: the edge's direction from the corners' lumas, two blends along it, the wider kept unless it
+// leaves the local range
+float3 Fxaa(float2 uv) {
+    float2 r = src.xy;
+    float3 m = Tap(uv);
+    float nw = Luma(Tap(uv + float2(-1, -1) * r)), ne = Luma(Tap(uv + float2(1, -1) * r));
+    float sw = Luma(Tap(uv + float2(-1, 1) * r)), se = Luma(Tap(uv + float2(1, 1) * r));
+    float lm = Luma(m);
+    float lo = min(lm, min(min(nw, ne), min(sw, se))), hi = max(lm, max(max(nw, ne), max(sw, se)));
+    if (hi - lo < max(0.0312, hi * 0.125)) return m;
+    float2 dir = float2(-((nw + ne) - (sw + se)), (nw + sw) - (ne + se));
+    float reduce = max((nw + ne + sw + se) * 0.03125, 0.0078125);
+    dir = clamp(dir / (min(abs(dir.x), abs(dir.y)) + reduce), -8.0, 8.0) * r;
+    float3 a = 0.5 * (Tap(uv + dir * (1.0 / 3.0 - 0.5)) + Tap(uv + dir * (2.0 / 3.0 - 0.5)));
+    float3 b = a * 0.5 + 0.25 * (Tap(uv - dir * 0.5) + Tap(uv + dir * 0.5));
+    float lb = Luma(b);
+    return (lb < lo || lb > hi) ? a : b;
+}
+// the frame at uv: through FXAA, or the box of n x n texels a supersampled frame has per pixel
+float3 Source(float2 uv, float2 px) {
+    if (post.y > 0) return Fxaa(uv);
+    int n = max((int)opts.z, 1);
+    float3 c = 0;
+    for (int y = 0; y < n; y++)
+        for (int x = 0; x < n; x++) c += Tap(uv + px * ((float2(x, y) + 0.5) / n - 0.5));
+    return c / (n * n);
+}
+// the cross's difference added back, held within the neighbours' range so edges get no halo
+float3 Sharpen(float2 uv, float3 c) {
+    float2 r = src.xy * max(opts.z, 1.0);
+    float3 n = Tap(uv + float2(0, -r.y)), s = Tap(uv + float2(0, r.y));
+    float3 w = Tap(uv + float2(-r.x, 0)), e = Tap(uv + float2(r.x, 0));
+    float3 lo = min(c, min(min(n, s), min(w, e))), hi = max(c, max(max(n, s), max(w, e)));
+    return clamp(c + (4.0 * c - n - s - w - e) * 0.35, lo, hi);
+}
+float3 Vivid(float3 c) {
+    c = lerp(Luma(c).xxx, c, 1.3);
+    return lerp(c, smoothstep(0.0, 1.0, saturate(c)), 0.35);
+}
+// dark between the frame's lines, as a TV's beam leaves them
+float Scan(float y, float depth) {
+    float s = sin(frac(y * src.z) * 3.14159265);
+    return lerp(1.0 - depth, 1.0, s * s);
+}
+float4 psmain(O i) : SV_Target {
+    float2 q = (i.uv - uvrect.xy) / uvrect.zw;
+    float2 px = fwidth(i.uv);
+    int mode = (int)post.x;
+    if (mode == 4) {
+        // the tube's bulge, black past its edge
+        float2 cq = q * 2.0 - 1.0;
+        cq *= 1.0 + cq.yx * cq.yx * float2(0.045, 0.06);
+        q = cq * 0.5 + 0.5;
+        if (any(q < 0.0) || any(q > 1.0)) return float4(0, 0, 0, 1);
+    }
+    float2 uv = uvrect.xy + q * uvrect.zw;
+    float3 c = Source(uv, px);
+    if (mode == 1) c = Sharpen(uv, c);
+    else if (mode == 2) c = Vivid(c);
+    else if (mode == 3) c *= Scan(q.y, 0.3) * 1.12;
+    else if (mode == 4) {
+        // glow from the texels around, the lines, the shadow mask's stripes by screen pixel, the corners darker
+        float2 r = src.xy * 2.5;
+        float3 glow = (Tap(uv + float2(r.x, 0)) + Tap(uv - float2(r.x, 0)) + Tap(uv + float2(0, r.y)) +
+                       Tap(uv - float2(0, r.y))) * 0.25;
+        c = lerp(c, max(c, glow), 0.35);
+        c *= Scan(q.y, 0.45);
+        float k = fmod(floor(i.p.x), 3.0);
+        c *= k < 1.0 ? float3(1.0, 0.82, 0.82) : (k < 2.0 ? float3(0.82, 1.0, 0.82) : float3(0.82, 0.82, 1.0));
+        float v = pow(saturate(16.0 * q.x * q.y * (1.0 - q.x) * (1.0 - q.y)), 0.18);
+        c *= v * 1.38;
+    }
+    c = saturate(c) * opts.w;
+    if (opts.x > 0) c = float3(lut.Sample(ps, float2(c.r, 0.5)).r, lut.Sample(ps, float2(c.g, 0.5)).g, lut.Sample(ps, float2(c.b, 0.5)).b);
+    return float4(c, 1);
+}
+)";
+
 const char* kDepthHlsl = R"(
 Texture2D<float> img : register(t0);
 SamplerState ps : register(s1);
@@ -3006,9 +3102,22 @@ void VulkanBackend::DrawFrame(Target* t, uint32_t index) {
     float aspect = game::Aspect();
     float w = float(swap_extent_.width), h = float(swap_extent_.height);
     float vw = std::min(w, h * aspect), vh = vw / aspect;
-    float c[8] = {0, 0, 1, 1, gamma_ ? 1.0f : 0.0f, 0, 1, 1};
+    float c[16] = {0, 0, 1, 1, gamma_ ? 1.0f : 0.0f, 0, 1, 1};
+    // the screen filter and anti-aliasing, off unless the player picks them: the plain blit then
+    uint32_t filter = game::Opt().screen_filter, aa = game::Opt().anti_aliasing;
+    bool post = t && (filter || aa);
+    if (post) {
+        c[8] = 1.0f / float(std::max(t->w, 1u));
+        c[9] = 1.0f / float(std::max(t->h, 1u));
+        c[10] = float(t->gh ? t->gh : guest_h_);
+        c[12] = float(filter);
+        c[13] = aa == game::kAaFxaa ? 1.0f : 0.0f;
+        // supersampled: the texels each screen pixel covers, averaged
+        if (aa == game::kAaSsaa) c[6] = std::clamp(std::round(float(t->h) / std::max(vh, 1.0f)), 1.0f, 4.0f);
+    }
     Alloc cbuf = Constants(c, sizeof(c));
-    VkPipeline pipe = t ? FullScreenPipeline(kBlitHlsl, "psmain", swap_fmt_, VK_FORMAT_UNDEFINED, false) : VK_NULL_HANDLE;
+    VkPipeline pipe = t ? FullScreenPipeline(post ? kPresentHlsl : kBlitHlsl, "psmain", swap_fmt_, VK_FORMAT_UNDEFINED, false)
+                        : VK_NULL_HANDLE;
     VkDescriptorSet set = VK_NULL_HANDLE;
     if (pipe) {
         Transition(t->img, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);

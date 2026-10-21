@@ -16,10 +16,15 @@ inline bool KnownLanguage(const std::string& code) {
     return std::find(std::begin(kLanguages), std::end(kLanguages), code) != std::end(kLanguages);
 }
 
+// SSAA renders at twice the height, the presenter averages it down
+inline constexpr uint32_t kAaOff = 0, kAaFxaa = 1, kAaSsaa = 2;
+
 struct Options {
     bool skip_intros = false;  // logos at boot and the film after pressing start
     bool fps_counter = false;
     uint32_t fmv_scale = 0;  // 4:3 films on a wider screen: 0 fill it, top and bottom cut; 1 kept 4:3
+    uint32_t screen_filter = 0;  // the present's look: 0 none, 1 sharpen, 2 vivid, 3 scanlines, 4 CRT
+    uint32_t anti_aliasing = 0;  // kAaOff, kAaFxaa or kAaSsaa
     uint32_t aspect_ratio = 0;  // the frame's shape in hundredths (133 is 4:3), 0 the whole screen; common/aspect.h
     bool reload_blur = true;
     uint32_t draw_distance = 1;  // times the game's LOD and draw distances
