@@ -28,7 +28,7 @@ There are no tests or linters in this repo.
 
 ## CI/CD
 
-None yet: Black-Android's release workflow (and its encrypted xbe) was removed. `app/build.gradle` still signs with a release key from the `BLACK_KEYSTORE*` environment variables when they are set, else the debug key. `UpdateChecker.REPO` is empty, so the app asks GitHub nothing until it names a repository.
+`.github/workflows/build.yml` runs on Windows for each `v*` tag, and by hand (workflow_dispatch, artifact only). It decrypts `ci/default.xbe.enc` with the `XBE_KEY` secret (AES-256-CBC, PBKDF2, 200000 iterations; the command to make it is in the workflow's header), checks its SHA-1, runs `build.bat` with `GRADLE_ARGS` setting `-PversionCode`/`-PversionName` from the tag, and for a tag publishes a release with `ci/release-notes.md` and the commits since the previous tag. `app/build.gradle` signs with a release key from the `BLACK_KEYSTORE*` environment variables when they are set (the workflow sets them from the `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS` and `KEY_PASSWORD` secrets), else the debug key. `UpdateChecker.REPO` names the repository whose latest release the app checks.
 
 ## Where the SDK comes from
 
