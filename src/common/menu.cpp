@@ -108,6 +108,9 @@ constexpr uint32_t kAudioOutputs[] = {audio::kOutputAuto, audio::kOutputMono, au
 const char* const kAudioOutputNames[] = {"AUTOMATIC", "MONO", "2.0 STEREO", "5.1 SURROUND"};
 const char* const kLanguageNames[] = {"ENGLISH", "FRENCH", "GERMAN", "ITALIAN", "SPANISH",
                                       "INDONESIAN"};  // as game::kLanguages
+constexpr const char* kDonateUrl = "https://sociabuzz.com/racas/tribe";
+constexpr const char* kGithubUrl = "https://github.com/RanggaCasper";
+constexpr const char* kYoutubeUrl = "https://youtube.com/c/@RanggaCasper";
 constexpr uint32_t kFpsCaps[] = {30, 60, 75, 90, 120, 144, 165, 240, 360, kFpsCapRefresh, 0};
 
 int StepIndex(int index, int step, int count) {
@@ -300,6 +303,24 @@ constexpr Row kGeneralRows[] = {
     {Kind::Value, kInfiniteEnergy, "INFINITE ENERGY"},
     {Kind::Value, kMaxMana, "MAX MANA"},
     {Kind::Value, kMaxExperience, "MAX EXPERIENCE"},
+};
+
+// the credits' names, an info row's id; as they are, untranslated
+const char* const kCreditNames[] = {"Rangga Casper", "Zukiru", "TGP482", "SDL, glslang, toml++, Dear ImGui",
+                                    "xemu, Cxbx-Reloaded"};
+
+// a page of its own: who made the port, and the links to support it
+constexpr Row kCreditRows[] = {
+    {Kind::Heading, -1, "CREDITS"},
+    {Kind::Info, 0, "ANDROID PORT"},
+    {Kind::Info, 1, "HDR"},
+    {Kind::Info, 2, "RECOMPILER AND RUNTIME"},
+    {Kind::Info, 3, "LIBRARIES"},
+    {Kind::Info, 4, "XBOX REFERENCES"},
+    {Kind::Heading, -1, "SUPPORT"},
+    {Kind::Link, kDonate, "DONATE"},
+    {Kind::Link, kGithub, "GITHUB"},
+    {Kind::Link, kYoutube, "YOUTUBE"},
 };
 
 // a page of its own, apart from the recomp's settings
@@ -570,14 +591,16 @@ std::string KeyText(std::string keys) {
 }
 
 // as options_menu.cpp's captions
-const char* const kPages[] = {"GRAPHICS", "TOUCH CONTROLS", "GENERAL", "KEYBOARD"};
+const char* const kPages[] = {"GRAPHICS", "TOUCH CONTROLS", "GENERAL", "KEYBOARD", "CREDITS"};
 constexpr int kSettingsPage = 0;
 constexpr int kTouchPage = 1;
 constexpr int kGeneralPage = 2;
 constexpr int kKeyboardPage = 3;
+constexpr int kCreditsPage = 4;
 constexpr int kCheatsPage = -1;  // Black's weapon cheats, none here
 
 void RestoreDefaults(int page) {
+    if (page == kCreditsPage) return;  // nothing to reset
     game::Options& o = game::Opt();
     if (page == kCheatsPage) {
         game::Options none;
@@ -700,6 +723,52 @@ void ValueRow(const Row& r) {
     if (step) RowText(r.id, step);
 }
 
+const char* LinkUrl(int id) {
+    switch (id) {
+        case kDonate: return kDonateUrl;
+        case kGithub: return kGithubUrl;
+        case kYoutube: return kYoutubeUrl;
+        default: return nullptr;
+    }
+}
+
+// label left, OPEN right; a tap, click, Enter or A anywhere on the row opens the page in the browser
+void LinkRow(const Row& r) {
+    RowBox box = MeasureRow();
+    ImGui::PushID(r.label);
+    bool open = ImGui::Selectable("##link", false, ImGuiSelectableFlags_AllowOverlap, ImVec2(box.row_w, box.row_h));
+    if (ImGui::IsItemFocused() || ImGui::IsItemHovered()) FillItem();
+    RowLabel(box, r.label);
+    std::string value = Ui("OPEN");
+    float value_x = box.row_x + box.row_w - box.block_w + box.row_h + ImGui::GetStyle().ItemSpacing.x;
+    float pad = (box.value_w - ImGui::CalcTextSize(value.c_str()).x) * 0.5f;
+    ImGui::SetCursorPos(ImVec2(value_x + std::max(pad, 0.0f), box.row_y));
+    ImGui::AlignTextToFramePadding();
+    ImGui::PushStyleColor(ImGuiCol_Text, kHeading);
+    ImGui::TextUnformatted(value.c_str());
+    ImGui::PopStyleColor();
+    ImGui::PopID();
+    EndRow(box);
+    if (open)
+        if (const char* url = LinkUrl(r.id)) SDL_OpenURL(url);
+}
+
+// the role left, the name right-aligned at the row's end
+void InfoRow(const Row& r) {
+    RowBox box = MeasureRow();
+    RowLabel(box, r.label);
+    if (r.id >= 0 && r.id < int(std::size(kCreditNames))) {
+        const char* name = kCreditNames[r.id];
+        float x = box.row_x + box.row_w - ImGui::CalcTextSize(name).x - ImGui::GetStyle().ItemInnerSpacing.x;
+        ImGui::SetCursorPos(ImVec2(x, box.row_y));
+        ImGui::AlignTextToFramePadding();
+        ImGui::PushStyleColor(ImGuiCol_Text, kHeading);
+        ImGui::TextUnformatted(name);
+        ImGui::PopStyleColor();
+    }
+    EndRow(box);
+}
+
 void KeyRow(const Row& r) {
     int cleared = -1;
     int box = BindRow(r.label, KeyBoxes(size_t(r.id)), g_capture == r.id ? g_capture_slot : -1, cleared);
@@ -718,6 +787,8 @@ void DrawRows(int page) {
         const Row& r = list[i];
         if (r.kind == Kind::Heading) Section(r.label);
         else if (r.kind == Kind::Value) ValueRow(r);
+        else if (r.kind == Kind::Link) LinkRow(r);
+        else if (r.kind == Kind::Info) InfoRow(r);
         else KeyRow(r);
     }
 }
@@ -766,7 +837,9 @@ void DrawTitle() {
     ImGui::TextUnformatted(title.c_str());
 }
 
-// the hint line, then Back and Defaults on the right
+constexpr const char* kCredit = "Port by Rangga Casper";
+
+// the hint line, then the credit on the left and Back and Defaults on the right
 void DrawFooter(float em) {
     ImGui::Separator();
     ImGui::PushStyleColor(ImGuiCol_Text, kDim);
@@ -776,6 +849,9 @@ void DrawFooter(float em) {
     ImGui::TextUnformatted(Ui(hint, false).c_str());
     ImGui::PopStyleColor();
     float bw = em * 8;
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextColored(kDim, "%s", kCredit);
+    ImGui::SameLine(0, 0);
     float buttons_pad = ImGui::GetContentRegionAvail().x - bw * 2 - ImGui::GetStyle().ItemSpacing.x;
     ImGui::SetCursorPosX(ImGui::GetCursorPosX() + std::max(buttons_pad, 0.0f));
     if (ImGui::Button(Ui("Back", false).c_str(), ImVec2(bw, 0))) ToggleMenu();
@@ -863,6 +939,10 @@ const rows::Row* rows::Page(int page, size_t* count) {
         *count = std::size(kGeneralRows);
         return kGeneralRows;
     }
+    if (page == kCreditsPage) {
+        *count = std::size(kCreditRows);
+        return kCreditRows;
+    }
     *count = std::size(kGraphicsRows);
     return kGraphicsRows;
 }
@@ -913,6 +993,10 @@ void DrawFpsCounter(double fps) {
     float big = ImGui::GetFontSize() * 1.5f, small = ImGui::GetFontSize();
     ImVec2 fs = ImGui::GetFont()->CalcTextSizeA(big, FLT_MAX, 0, text);
     ImVec2 ps = perf.empty() ? ImVec2(0, 0) : ImGui::GetFont()->CalcTextSizeA(small, FLT_MAX, 0, perf.c_str());
+    ImVec2 cs = ImGui::GetFont()->CalcTextSizeA(small, FLT_MAX, 0, kCredit);
+    // the first line: the frame rate, the credit beside it
+    float gap = small;
+    float line_w = fs.x + gap + cs.x;
     float block = fs.y + ps.y;
     float margin = screen.y * 0.03f;
     uint32_t pos = o.fps_position;
@@ -930,8 +1014,11 @@ void DrawFpsCounter(double fps) {
         if (pos == kFpsTopRight || pos == kFpsBottomRight) return screen.x - side - w;
         return screen.x / 2 - w / 2;
     };
+    float line_x = x(line_w);
+    DrawShadowed(dl, big, ImVec2(line_x, y), IM_COL32(255, 214, 90, 255), text);
+    // the credit beside the frame rate, dimmer, its foot on the same line
+    DrawShadowed(dl, small, ImVec2(line_x + fs.x + gap, y + fs.y - cs.y), IM_COL32(200, 180, 150, 220), kCredit);
     if (!perf.empty()) DrawShadowed(dl, small, ImVec2(x(ps.x), y + fs.y), IM_COL32(235, 235, 235, 255), perf.c_str());
-    DrawShadowed(dl, big, ImVec2(x(fs.x), y), IM_COL32(255, 214, 90, 255), text);
 }
 
 void DrawUi(double fps) {

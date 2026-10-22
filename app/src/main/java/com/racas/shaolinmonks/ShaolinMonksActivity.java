@@ -156,6 +156,76 @@ public class ShaolinMonksActivity extends SDLActivity {
         });
     }
 
+    // SHOW CREDITS from the options menu, from the game's thread
+    public void showCredits() {
+        runOnUiThread(() -> {
+            if (isFinishing() || (dialog != null && dialog.isShowing())) return;
+            
+            // Create a custom view with social links
+            android.view.LayoutInflater inflater = android.view.LayoutInflater.from(this);
+            android.view.View view = inflater.inflate(android.R.layout.list_content, null);
+            
+            // Create a simple LinearLayout if layout doesn't exist
+            android.widget.LinearLayout layout = new android.widget.LinearLayout(this);
+            layout.setOrientation(android.widget.LinearLayout.VERTICAL);
+            layout.setPadding(16, 16, 16, 16);
+            
+            // Credit text
+            android.widget.TextView creditText = new android.widget.TextView(this);
+            creditText.setText(getString(R.string.port_credit));
+            creditText.setTextSize(18);
+            creditText.setGravity(android.view.Gravity.CENTER);
+            android.widget.LinearLayout.LayoutParams creditParams = new android.widget.LinearLayout.LayoutParams(
+                    android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                    android.widget.LinearLayout.LayoutParams.WRAP_CONTENT);
+            creditParams.setMargins(0, 0, 0, 24);
+            layout.addView(creditText, creditParams);
+            
+            // Donate button
+            android.widget.Button donateBtn = new android.widget.Button(this);
+            donateBtn.setText(R.string.donate);
+            android.widget.LinearLayout.LayoutParams btnParams = new android.widget.LinearLayout.LayoutParams(
+                    android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                    android.widget.LinearLayout.LayoutParams.WRAP_CONTENT);
+            btnParams.setMargins(0, 0, 0, 8);
+            donateBtn.setOnClickListener(v -> open(getString(R.string.donate_url)));
+            layout.addView(donateBtn, btnParams);
+            
+            // GitHub button
+            android.widget.Button githubBtn = new android.widget.Button(this);
+            githubBtn.setText(R.string.github);
+            android.widget.LinearLayout.LayoutParams gitParams = new android.widget.LinearLayout.LayoutParams(
+                    android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                    android.widget.LinearLayout.LayoutParams.WRAP_CONTENT);
+            gitParams.setMargins(0, 0, 0, 8);
+            githubBtn.setOnClickListener(v -> open(getString(R.string.github_url)));
+            layout.addView(githubBtn, gitParams);
+            
+            // YouTube button
+            android.widget.Button youtubeBtn = new android.widget.Button(this);
+            youtubeBtn.setText(R.string.youtube);
+            android.widget.LinearLayout.LayoutParams ytParams = new android.widget.LinearLayout.LayoutParams(
+                    android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                    android.widget.LinearLayout.LayoutParams.WRAP_CONTENT);
+            youtubeBtn.setOnClickListener(v -> open(getString(R.string.youtube_url)));
+            layout.addView(youtubeBtn, ytParams);
+            
+            dialog = new AlertDialog.Builder(this)
+                    .setTitle(R.string.credits)
+                    .setView(layout)
+                    .setPositiveButton("Close", null)
+                    .show();
+        });
+    }
+
+    // OPEN DONATION LINK from the options menu, from the game's thread
+    public void openDonation() {
+        runOnUiThread(() -> {
+            if (isFinishing()) return;
+            open(getString(R.string.donate_url));
+        });
+    }
+
     // the performance overlay's fallback temperature, in tenths of a degree, -1 unknown: an app may not read the
     // thermal zones, the battery's sticky broadcast it always may
     public int batteryTemperature() {

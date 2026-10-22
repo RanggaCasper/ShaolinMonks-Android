@@ -16,13 +16,14 @@ void PaceFrame();  // app::Pace, with kFpsCapRefresh; game thread, after the pre
 // the panel's rows, for the game's own options menu
 namespace rows {
 
-enum class Kind { Heading, Value, Bind };
+// a link row opens its page on a tap, an info row is a line of plain text
+enum class Kind { Heading, Value, Bind, Link, Info };
 struct Row {
     Kind kind;
     int id;  // a bind row's input action
     const char* label;
 };
-// 0 graphics, 1 touch controls, 2 general, 3 mouse and keyboard, 4 cheats
+// 0 graphics, 1 touch controls, 2 general, 3 mouse and keyboard, 4 credits
 const Row* Page(int page, size_t* count);
 
 }  // namespace rows

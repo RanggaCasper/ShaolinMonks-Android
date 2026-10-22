@@ -1,4 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Shaolin Monks</string>
+    <string name="port_credit">Port by Rangga Casper</string>
+    <string name="donate">Donate</string>
+    <string name="donate_url">https://sociabuzz.com/racas/tribe</string>
+    <string name="credits">Credits</string>
+    <string name="github">GitHub</string>
+    <string name="youtube">YouTube</string>
+    <string name="github_url">https://github.com/RanggaCasper</string>
+    <string name="youtube_url">https://youtube.com/c/@RanggaCasper</string>
 </resources>
