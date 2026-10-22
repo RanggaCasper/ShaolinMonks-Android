@@ -41,6 +41,8 @@ uint32_t ControlsOpacity();
 void StepOpacity(int step);
 uint32_t ControlsSize();
 void StepSize(int step);
+const char* StickModeName();
+void StepStickMode(int step);
 void EditLayout();
 }  // namespace touch
 
@@ -275,6 +277,7 @@ constexpr Row kTouchRows[] = {
     {Kind::Heading, -1, "TOUCH"},
     {Kind::Value, kTouchLayout, "CONTROLS LAYOUT"},
     {Kind::Value, kPs2Buttons, "PS2 BUTTON ICONS"},
+    {Kind::Value, kStickMode, "STICK MODE"},
     {Kind::Value, kTouchOpacity, "CONTROLS OPACITY"},
     {Kind::Value, kTouchSize, "CONTROLS SIZE"},
     {Kind::Value, kTouchEdit, "EDIT CONTROLS POSITION"},
@@ -492,6 +495,11 @@ void StepInputRow(int id, int step, char (&text)[64]) {
             // the presets, CUSTOM once a control was moved
             if (step) touch::StepLayout(step);
             std::snprintf(text, sizeof(text), "%s", touch::LayoutName());
+            break;
+        case kStickMode:
+            // floating sticks come where the thumb lands, fixed ones stay where they are drawn
+            if (step) touch::StepStickMode(step);
+            std::snprintf(text, sizeof(text), "%s", touch::StickModeName());
             break;
         case kTouchOpacity:
             if (step) touch::StepOpacity(step);

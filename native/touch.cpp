@@ -559,6 +559,7 @@ constexpr Preset kPresets[] = {{"default", "STANDARD", &kStandard},
                                {"large", "LARGE", &kLarge}};
 
 constexpr float kStickZone = 0.42f;    // share of the width from the left a touch takes the stick in
+constexpr float kFixedReach = 1.5f;    // FIXED sticks: their radii from the centre a touch takes them in
 constexpr float kLookCounts = 1800.0f;  // mouse counts a swipe across the screen's width turns: 90 degrees
 constexpr uint64_t kShownMs = 8000;     // the controls hide this long after the last touch while a pad is plugged in
 
@@ -599,6 +600,9 @@ Layout g_layout = kStandard;
 size_t g_preset = 0;
 float g_opacity = 0.85f;
 float g_scale = 1.0f;  // every control's size, on top of its own
+// STICK MODE: floating, the left of the screen the left stick and a drag on the right the right stick from wherever
+// the thumb lands; fixed, each stick where it is drawn alone, so a stray touch elsewhere moves nothing
+bool g_fixed_sticks = false;
 bool g_loaded = false;
 // the editor: the layout before it opened (for Cancel), the control picked
 std::atomic<bool> g_editing{false};
@@ -632,6 +636,7 @@ void LoadLayout() {
         g_layout = *kPresets[g_preset].places;
         g_opacity = std::clamp(float(t["opacity"].value_or(double(g_opacity))), 0.2f, 1.0f);
         g_scale = std::clamp(float(t["scale"].value_or(double(g_scale))), 0.5f, 1.5f);
+        g_fixed_sticks = t["stick_mode"].value_or(std::string("floating")) == "fixed";
         if (t["version"].value_or(int64_t(1)) < kLayoutVersion) return;
         for (size_t i = 0; i < kPlaces; i++) {
             // the menus' controls are not in the editor: always the preset's
@@ -656,7 +661,8 @@ void SaveLayout() {
                         toml::table{{"x", double(p.x)}, {"y", double(p.y)}, {"r", double(p.r)}, {"hidden", p.hidden}});
     }
     toml::table t{{"version", kLayoutVersion}, {"preset", kPresets[g_preset].id}, {"opacity", double(g_opacity)},
-                  {"scale", double(g_scale)}, {"controls", controls}};
+                  {"scale", double(g_scale)}, {"stick_mode", g_fixed_sticks ? "fixed" : "floating"},
+                  {"controls", controls}};
     std::ofstream(LayoutFile()) << t << "\n";
 }
 
@@ -791,6 +797,16 @@ void StickOf(const Finger& f, float& x, float& y, size_t stick = kStick) {
 }
 
 void UpdateStick(const Finger& f) { StickOf(f, g_stick_x, g_stick_y); }
+
+// FIXED sticks: the one a touch came down near, its deflection from the centre; kPlaces for none
+size_t FixedStickAt(float x, float y) {
+    for (size_t s : {kStick, kRStick}) {
+        if (g_layout[s].hidden) continue;
+        float cx = g_layout[s].x * Width(), cy = g_layout[s].y * Height(), r = Radius(s) * kFixedReach;
+        if ((x - cx) * (x - cx) + (y - cy) * (y - cy) <= r * r) return s;
+    }
+    return kPlaces;
+}
 
 // a dpad arrow held in the menus: a step as it comes down, then steps at a calm pace once held a while; the game
 // steps on every poll the arrow is down, too quick to land on a row
@@ -1043,6 +1059,15 @@ void FingerDown(SDL_FingerID id, float x, float y) {
         g_cursor_touch = true;
     } else if (GameMenu()) {
         f.role = Role::None;  // no stick or look over a menu
+    } else if (g_fixed_sticks) {
+        size_t s = FixedStickAt(x, y);
+        f.role = s == kStick ? Role::Stick : s == kRStick ? Role::Look : Role::None;
+        if (s != kPlaces) {
+            f.x0 = g_layout[s].x * Width();
+            f.y0 = g_layout[s].y * Height();
+            if (s == kStick) UpdateStick(f);
+            else StickOf(f, g_rstick_x, g_rstick_y, kRStick);
+        }
     } else if (x < Width() * kStickZone) {
         f.role = Role::Stick;
     } else {
@@ -1697,6 +1722,19 @@ void StepSize(int step) {
     std::lock_guard lock(g_lock);
     EnsureLayout();
     g_scale = float(std::clamp(int(Percent(g_scale)) + step * 5, 50, 150)) / 100.0f;
+    SaveLayout();
+}
+
+const char* StickModeName() {
+    std::lock_guard lock(g_lock);
+    EnsureLayout();
+    return g_fixed_sticks ? "FIXED" : "FLOATING";
+}
+
+void StepStickMode(int) {
+    std::lock_guard lock(g_lock);
+    EnsureLayout();
+    g_fixed_sticks = !g_fixed_sticks;
     SaveLayout();
 }
 

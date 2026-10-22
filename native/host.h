@@ -53,6 +53,8 @@ uint32_t ControlsOpacity();  // percent
 void StepOpacity(int step);
 uint32_t ControlsSize();  // percent of each control's own size
 void StepSize(int step);
+const char* StickModeName();  // FLOATING or FIXED
+void StepStickMode(int step);
 void EditLayout();  // the controls over the screen to drag where they go
 }  // namespace touch
 
