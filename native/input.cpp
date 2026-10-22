@@ -49,15 +49,17 @@ void Read(SDL_Gamepad* pad, Pad& p) {
         SDL_GAMEPAD_BUTTON_DPAD_RIGHT, SDL_GAMEPAD_BUTTON_START,     SDL_GAMEPAD_BUTTON_BACK,
         SDL_GAMEPAD_BUTTON_LEFT_STICK, SDL_GAMEPAD_BUTTON_RIGHT_STICK};
     for (int i = 0; i < 8; i++) p.buttons |= uint16_t(SDL_GetGamepadButton(pad, kButtons[i]) << i);
-    // A B X Y black white
-    constexpr SDL_GamepadButton kAnalog[] = {SDL_GAMEPAD_BUTTON_SOUTH,          SDL_GAMEPAD_BUTTON_EAST,
-                                             SDL_GAMEPAD_BUTTON_WEST,           SDL_GAMEPAD_BUTTON_NORTH,
-                                             SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER, SDL_GAMEPAD_BUTTON_LEFT_SHOULDER};
-    for (int i = 0; i < 6; i++) p.analog[i] = SDL_GetGamepadButton(pad, kAnalog[i]) ? 0xFF : 0;
+    // A B X Y
+    constexpr SDL_GamepadButton kAnalog[] = {SDL_GAMEPAD_BUTTON_SOUTH, SDL_GAMEPAD_BUTTON_EAST,
+                                             SDL_GAMEPAD_BUTTON_WEST, SDL_GAMEPAD_BUTTON_NORTH};
+    for (int i = 0; i < 4; i++) p.analog[i] = SDL_GetGamepadButton(pad, kAnalog[i]) ? 0xFF : 0;
     auto axis = [&](SDL_GamepadAxis a) { return int(SDL_GetGamepadAxis(pad, a)); };
-    // 0 to 32767 into 0 to 255
-    p.analog[6] = uint8_t(std::max(axis(SDL_GAMEPAD_AXIS_LEFT_TRIGGER), 0) >> 7);
-    p.analog[7] = uint8_t(std::max(axis(SDL_GAMEPAD_AXIS_RIGHT_TRIGGER), 0) >> 7);
+    // the PS2's layout, as the touch controls label it: L1 / R1 the game's LT / RT, L2 / R2 its White / Black;
+    // the triggers' 0 to 32767 into 0 to 255
+    p.analog[4] = uint8_t(std::max(axis(SDL_GAMEPAD_AXIS_RIGHT_TRIGGER), 0) >> 7);  // black
+    p.analog[5] = uint8_t(std::max(axis(SDL_GAMEPAD_AXIS_LEFT_TRIGGER), 0) >> 7);   // white
+    p.analog[6] = SDL_GetGamepadButton(pad, SDL_GAMEPAD_BUTTON_LEFT_SHOULDER) ? 0xFF : 0;   // LT
+    p.analog[7] = SDL_GetGamepadButton(pad, SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER) ? 0xFF : 0;  // RT
     // SDL's sticks have y down; not plain negation: -32768 has no positive
     p.lx = int16_t(axis(SDL_GAMEPAD_AXIS_LEFTX));
     p.ly = int16_t(-1 - axis(SDL_GAMEPAD_AXIS_LEFTY));
@@ -93,10 +95,10 @@ void LooseKey(int code, int& bit, int& analog) {
         case 97: analog = 1; break;   // BUTTON_B (circle)
         case 99: analog = 2; break;   // BUTTON_X (square)
         case 100: analog = 3; break;  // BUTTON_Y (triangle)
-        case 103: analog = 4; break;  // BUTTON_R1: black
-        case 102: analog = 5; break;  // BUTTON_L1: white
-        case 104: analog = 6; break;  // BUTTON_L2
-        case 105: analog = 7; break;  // BUTTON_R2
+        case 102: analog = 6; break;  // BUTTON_L1: LT
+        case 103: analog = 7; break;  // BUTTON_R1: RT
+        case 104: analog = 5; break;  // BUTTON_L2: white
+        case 105: analog = 4; break;  // BUTTON_R2: black
         default: break;
     }
 }
@@ -117,8 +119,9 @@ void MergeLoose(Pad& p) {
     if (l.hx < -0.5f) p.buttons |= 1 << 2;
     if (l.hx > 0.5f) p.buttons |= 1 << 3;
     for (int i = 0; i < 8; i++) p.analog[i] = std::max(p.analog[i], l.analog[i]);
-    p.analog[6] = std::max(p.analog[6], Trigger(l.lt));
-    p.analog[7] = std::max(p.analog[7], Trigger(l.rt));
+    // the triggers' axes are L2 / R2: white and black
+    p.analog[5] = std::max(p.analog[5], Trigger(l.lt));
+    p.analog[4] = std::max(p.analog[4], Trigger(l.rt));
     // Android's y is down, the pad's up
     auto further = [](int16_t& to, int16_t v) { if (std::abs(int(v)) > std::abs(int(to))) to = v; };
     further(p.lx, Axis(l.lx));
