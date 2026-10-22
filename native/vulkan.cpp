@@ -3301,18 +3301,37 @@ void VulkanBackend::UploadGammaRamp() {
     Transition(lut_, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 }
 
+// textures kept by count and by bytes: without BC (PowerVR, Mali) DXT is decoded to BGRA, 4 to 8 times its size, and a
+// thousand of those ran a phone out of memory within minutes (#17)
 void VulkanBackend::ReleaseOldTextures() {
     constexpr uint64_t kSweepEvery = 60;
     constexpr size_t kTexturesKept = 1024;  // a phone has less memory than a PC: fewer kept
     constexpr uint64_t kIdleFrames = 600;
-    if (presents_ % kSweepEvery != 0 || textures_.size() <= kTexturesKept) return;
+    constexpr VkDeviceSize kTextureBytes = 384ull << 20;
+    if (presents_ % kSweepEvery != 0) return;
+    VkDeviceSize bytes = 0;
+    for (const auto& [key, t] : textures_) bytes += t.img.mem.size;
+    if (textures_.size() <= kTexturesKept && bytes <= kTextureBytes) return;
+    std::vector<std::pair<uint64_t, uint64_t>> lru;  // last frame drawn, key
     for (auto it = textures_.begin(); it != textures_.end();) {
         if (it->second.frame + kIdleFrames < presents_) {
+            bytes -= it->second.img.mem.size;
             Retire(it->second.img);
             it = textures_.erase(it);
         } else {
+            lru.push_back({it->second.frame, it->first});
             ++it;
         }
+    }
+    if (bytes <= kTextureBytes) return;
+    // still over: the least recently drawn go, but none drawn in the last second; those are made again when drawn
+    std::sort(lru.begin(), lru.end());
+    for (const auto& [frame, key] : lru) {
+        if (bytes <= kTextureBytes || frame + kSweepEvery >= presents_) break;
+        auto it = textures_.find(key);
+        bytes -= it->second.img.mem.size;
+        Retire(it->second.img);
+        textures_.erase(it);
     }
 }
 
