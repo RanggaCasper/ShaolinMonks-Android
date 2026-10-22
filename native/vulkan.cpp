@@ -2890,7 +2890,7 @@ void VulkanBackend::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t
     SurfaceSize(draw_rt_ ? s.rt : s.zs, size.w, size.h);
     DrawConstants c{};
     FillSurfaceConstants(s, size, c);
-    FillFogConstants(s, c);
+    if (game::Opt().fog) FillFogConstants(s, c);  // off: no fog mode, the shaders' fog factor stays 1
     FillCombinerConstants(s, c);
     FillTextureConstants(s, stages, c);
     if (sh.fixed_transform) {

@@ -33,6 +33,7 @@ struct Options {
     bool ultrawide = false;     // a frame wider than 4:3 shows more of the sides instead of stretching, common/aspect.h
     bool reload_blur = true;
     bool bloom = true;  // the glow added over the frame, native/vulkan.cpp skips it when off
+    bool fog = true;    // the distance fog, native/vulkan.cpp draws without it when off
     uint32_t draw_distance = 1;  // times the game's LOD and draw distances
     float mouse_sensitivity = 1.0f;
     float touch_sensitivity = 1.0f;  // the touch screen's look, apart from the mouse's
