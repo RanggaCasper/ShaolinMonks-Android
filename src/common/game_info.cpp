@@ -93,6 +93,7 @@ const app::GameInfo app::kGame = {
                 {"unlock_extras", &game::Opt().unlock_extras, nullptr},
                 {"god_mode", &game::Opt().god_mode, nullptr},
                 {"infinite_fatality", &game::Opt().infinite_fatality, nullptr},
+                {"infinite_energy", &game::Opt().infinite_energy, nullptr},
                 {"max_mana", &game::Opt().max_mana, nullptr},
                 {"max_experience", &game::Opt().max_experience, nullptr},
                 {"one_hit_kill", &game::Opt().one_hit_kill, nullptr},

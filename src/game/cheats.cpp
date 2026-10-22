@@ -244,6 +244,19 @@ void Mana(uint32_t n, bool longest, bool full) {
     if (G<float>(at + kFatality) < top) G<float>(at + kFatality) = top;
 }
 
+// The players' energy, the blue bar under the health that the specials (RT with a face button) spend: a table of
+// kEnergyEntry bytes from 0x4E65A8, its count at 0x4E65E0, by the character's record less one; read by 0x0760F0 for
+// the moves and the HUD (0x08E009), filled back by 0x076130 up to 100
+constexpr uint32_t kEnergyTable = 0x4E65A8, kEnergyCount = 0x4E65E0, kEnergyEntry = 0x24;
+constexpr float kMostEnergy = 100.0f;
+void FullEnergy() {
+    uint32_t count = R32(kEnergyCount);
+    for (uint32_t i = 0; i < 2 && i < count; i++) {
+        float& energy = G<float>(kEnergyTable + i * kEnergyEntry);
+        if (energy >= 0 && energy < kMostEnergy) energy = kMostEnergy;
+    }
+}
+
 // every enemy's health down to 1: the next hit kills
 void OneHitKill() {
     uint32_t bodies = R32(kBodies), used = R32(kBodiesUsed), count = R32(kBodyCount);
@@ -315,6 +328,7 @@ void ApplyCheats() {
     if (Opt().infinite_fatality || Opt().max_mana)
         for (uint32_t n = 1; n <= 2; n++) Mana(n, Opt().max_mana, Opt().infinite_fatality);
     if (Opt().max_experience) MaxExperience();
+    if (Opt().infinite_energy) FullEnergy();
     SkipCutscenes();
 }
 

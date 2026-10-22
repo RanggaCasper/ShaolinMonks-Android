@@ -297,6 +297,7 @@ constexpr Row kGeneralRows[] = {
     {Kind::Value, kOneHitKill, "ONE-HIT KILL"},
     {Kind::Value, kMaxHealth, "MAX HEALTH UPGRADES"},
     {Kind::Value, kInfiniteFatality, "INFINITE MANA"},
+    {Kind::Value, kInfiniteEnergy, "INFINITE ENERGY"},
     {Kind::Value, kMaxMana, "MAX MANA"},
     {Kind::Value, kMaxExperience, "MAX EXPERIENCE"},
 };
@@ -351,6 +352,7 @@ bool* ToggleFlag(Settings& s, int id) {
         case kPs2Buttons: return &o.ps2_buttons;
         case kUnlockExtras: return &o.unlock_extras;
         case kInfiniteFatality: return &o.infinite_fatality;
+        case kInfiniteEnergy: return &o.infinite_energy;
         case kMaxExperience: return &o.max_experience;
         case kMaxHealth: return &o.max_health;
         case kMaxMana: return &o.max_mana;

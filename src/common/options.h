@@ -52,7 +52,8 @@ struct Options {
     bool one_hit_kill = false;  // cheat: any hit of the players' kills an enemy
     bool infinite_grenades = false;  // cheat: throwing a grenade keeps the count
     bool unlock_characters = false;  // cheat: every character on the character select, src/game/cheats.cpp
-    bool infinite_fatality = false;  // cheat: the players' mana (the fatality meter, the blue bar) stays full
+    bool infinite_fatality = false;  // cheat: the players' mana (the fatality meter) stays full
+    bool infinite_energy = false;    // cheat: the players' energy, the blue bar under the health, stays full
     bool max_mana = false;  // cheat: the mana bar at its longest, every level of it
     bool max_health = false;  // cheat: every health upgrade, the health bar at its longest
     bool max_experience = false;  // cheat: the players' experience at its most, every move to buy
