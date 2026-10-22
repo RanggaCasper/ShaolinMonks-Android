@@ -1011,6 +1011,9 @@ void EditDown(Finger& f, float x, float y) {
 }
 
 void FingerDown(SDL_FingerID id, float x, float y) {
+    // Android gives a new finger the id of one lifted: one still here lost its lift, and kept, it would move with the
+    // new finger (a stick pushed by a touch on the other side)
+    std::erase_if(g_fingers, [id](const Finger& o) { return o.id == id; });
     Finger f;
     f.id = id;
     f.x0 = f.x = x;
@@ -1114,6 +1117,7 @@ void FingerMove(SDL_FingerID id, float x, float y) {
             input::g_touch_dy += int(std::lround(dy * k));
         }
         if (f.role == Role::Cursor) MenuMove(f);
+        break;
     }
 }
 
@@ -1221,6 +1225,14 @@ bool OnEvent(const SDL_Event& e) {
                 if (input::Active() && !input::Play() && !input::KeyCaptureUp()) input::g_wheel += notch;
             }
             return !app::MenuOpen();
+        case SDL_EVENT_WILL_ENTER_BACKGROUND: {
+            // the fingers' lifts may not come while the app is away: none is held when it is back
+            std::lock_guard lock(g_lock);
+            g_fingers.clear();
+            g_cursor_down = false;
+            Recount();
+            return false;
+        }
         case SDL_EVENT_FINGER_DOWN:
         case SDL_EVENT_FINGER_MOTION:
         case SDL_EVENT_FINGER_UP:
