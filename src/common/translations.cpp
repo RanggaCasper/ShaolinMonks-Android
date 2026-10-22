@@ -173,6 +173,8 @@ constexpr Entry kEntries[] = {
     // the touch layout editor
     {"RESET", {{}, {}, {}, {}, u"Atur ulang"}},
     {"CANCEL", {{}, {}, {}, {}, u"Batal"}},
+    {"HIDE", {{}, {}, {}, {}, u"Sembunyikan"}},
+    {"SHOW", {{}, {}, {}, {}, u"Tampilkan"}},
     {"DONE", {{}, {}, {}, {}, u"Selesai"}},
     {"DRAG A CONTROL TO MOVE IT", {{}, {}, {}, {}, u"Seret kontrol untuk memindahkannya"}},
 };

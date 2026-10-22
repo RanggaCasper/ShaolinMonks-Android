@@ -448,7 +448,7 @@ enum class Role : uint8_t { None, Stick, Look, Button, Cursor, Drag, Pinch, Menu
 // the host. Where it sits is the layout's, which the player edits and picks presets for
 enum : int { kGyro = -2, kPanel = -1, kAnalogA = 0, kAnalogB = 1, kAnalogX = 2, kAnalogY = 3, kAnalogLT = 6, kAnalogRT = 7 };
 constexpr int kBit = 8;  // kBit + n: buttons bit n (dpad up down left right, start, back, left thumb, right thumb)
-enum class Icon : uint8_t { Text, Pause, Gear, Back, Gyro, Up, Down, Left, Right };
+enum class Icon : uint8_t { Text, Pause, Gear, Back, Gyro, Up, Down, Left, Right, Camera };
 // Play while the player has the controls, Game outside the menus (cutscenes too), Menus in the menus and options
 enum class When : uint8_t { Play, Menus, Game };
 // how a control is drawn and touched: a circle, a shoulder's tab, a small pill, the dpad's rounded square. Its place's
@@ -465,6 +465,7 @@ struct Button {
     const char* caption = nullptr;  // what it does in the game, under a face button
     bool look = false;  // a drag from it turns the view as well, as a fire button does
     bool keep = false;  // never hidden: the way back out of the menus
+    bool rt = false;    // RT held with it: a special, one touch for the trigger and a face button
 };
 // the layout is set in the settings panel (TOUCH CONTROLS): its preset, opacity, size, and the editor that moves the
 // controls, see the functions at the end. A Text control shows its label.
@@ -484,6 +485,13 @@ constexpr Button kButtons[] = {
     {"dpad_down", "Down", nullptr, Icon::Down, kBit + 1, When::Game, Shape::Square},
     {"dpad_left", "Left", nullptr, Icon::Left, kBit + 2, When::Game, Shape::Square},
     {"dpad_right", "Right", nullptr, Icon::Right, kBit + 3, When::Game, Shape::Square},
+    // the right stick's click, which turns the camera to behind the player
+    {"camera", "Camera", nullptr, Icon::Camera, kBit + 7, When::Game, Shape::Round},
+    // the specials, RT with X, Y, A or B; hidden in the presets but the RPG one, shown from the layout editor
+    {"special1", "1", nullptr, Icon::Text, kAnalogX, When::Game, Shape::Round, "SPECIAL", false, false, true},
+    {"special2", "2", nullptr, Icon::Text, kAnalogY, When::Game, Shape::Round, "SPECIAL", false, false, true},
+    {"special3", "3", nullptr, Icon::Text, kAnalogA, When::Game, Shape::Round, "SPECIAL", false, false, true},
+    {"special4", "4", nullptr, Icon::Text, kAnalogB, When::Game, Shape::Round, "SPECIAL", false, false, true},
 };
 constexpr size_t kButtonCount = std::size(kButtons);
 constexpr size_t kStick = kButtonCount;  // the sticks' places, after the buttons'
@@ -492,6 +500,13 @@ constexpr size_t kPlaces = kButtonCount + 2;
 bool IsStick(size_t i) { return i >= kStick; }
 const char* PlaceId(size_t i) { return i == kStick ? "stick" : i == kRStick ? "rstick" : kButtons[i].id; }
 
+// a control the layout may hide: a button but the settings gear, the way back out of the menus, and the right stick
+// (its drags then turn nothing); the left stick stays, moved where the player likes
+bool Hideable(int i) {
+    if (i < 0) return false;
+    return size_t(i) == kRStick || (!IsStick(size_t(i)) && !kButtons[size_t(i)].keep);
+}
+
 // where a control sits: its centre as shares of the screen's width and height, its radius in screen heights
 struct Place {
     float x, y, r;
@@ -499,7 +514,7 @@ struct Place {
 };
 using Layout = std::array<Place, kPlaces>;
 // The presets. Each lists the places of a b x y, black white, lt rt, start back, the settings, the dpad's up down left
-// right, the left stick and the right stick.
+// right, the camera, the specials 1 to 4, the left stick and the right stick.
 // L2 over L1 and R2 over R1 in the top corners (White and Black are the L2 and R2), the dpad and the face buttons
 // halfway down the sides, a stick under each, Select and Start at the bottom and the settings at the top in the middle
 constexpr Layout kStandard = {{
@@ -508,6 +523,8 @@ constexpr Layout kStandard = {{
     {0.075f, 0.19f, 0.045f}, {0.925f, 0.19f, 0.045f},
     {0.565f, 0.92f, 0.035f}, {0.435f, 0.92f, 0.035f}, {0.50f, 0.075f, 0.045f},
     {0.115f, 0.36f, 0.05f}, {0.115f, 0.58f, 0.05f}, {0.065f, 0.47f, 0.05f}, {0.165f, 0.47f, 0.05f},
+    {0.74f, 0.32f, 0.045f},
+    {0.66f, 0.30f, 0.05f, true}, {0.66f, 0.47f, 0.05f, true}, {0.66f, 0.64f, 0.05f, true}, {0.73f, 0.20f, 0.05f, true},
     {0.26f, 0.78f, 0.12f}, {0.74f, 0.78f, 0.12f},
 }};
 // the shoulders as a row of tabs along the top, Back, the settings and Start between them, a small dpad under the
@@ -518,6 +535,8 @@ constexpr Layout kTopBar = {{
     {0.068f, 0.085f, 0.048f}, {0.932f, 0.085f, 0.048f},
     {0.585f, 0.075f, 0.036f}, {0.415f, 0.075f, 0.036f}, {0.50f, 0.075f, 0.045f},
     {0.10f, 0.25f, 0.042f}, {0.10f, 0.43f, 0.042f}, {0.06f, 0.34f, 0.042f}, {0.14f, 0.34f, 0.042f},
+    {0.70f, 0.44f, 0.045f},
+    {0.66f, 0.30f, 0.05f, true}, {0.66f, 0.47f, 0.05f, true}, {0.66f, 0.64f, 0.05f, true}, {0.73f, 0.20f, 0.05f, true},
     {0.15f, 0.74f, 0.13f}, {0.62f, 0.80f, 0.11f},
 }};
 // the standard's smaller and lower, the middle of the screen left clear
@@ -527,6 +546,8 @@ constexpr Layout kCompact = {{
     {0.07f, 0.17f, 0.038f}, {0.93f, 0.17f, 0.038f},
     {0.555f, 0.93f, 0.03f}, {0.445f, 0.93f, 0.03f}, {0.50f, 0.07f, 0.04f},
     {0.10f, 0.525f, 0.043f}, {0.10f, 0.715f, 0.043f}, {0.057f, 0.62f, 0.043f}, {0.143f, 0.62f, 0.043f},
+    {0.78f, 0.54f, 0.038f},
+    {0.66f, 0.30f, 0.05f, true}, {0.66f, 0.47f, 0.05f, true}, {0.66f, 0.64f, 0.05f, true}, {0.73f, 0.20f, 0.05f, true},
     {0.25f, 0.80f, 0.11f}, {0.72f, 0.80f, 0.11f},
 }};
 // the shoulders beside the dpad and the face buttons, for thumbs alone with no fingers on the top
@@ -536,6 +557,8 @@ constexpr Layout kLowShoulders = {{
     {0.27f, 0.50f, 0.045f}, {0.73f, 0.46f, 0.045f},
     {0.565f, 0.92f, 0.035f}, {0.435f, 0.92f, 0.035f}, {0.50f, 0.075f, 0.045f},
     {0.115f, 0.36f, 0.05f}, {0.115f, 0.58f, 0.05f}, {0.065f, 0.47f, 0.05f}, {0.165f, 0.47f, 0.05f},
+    {0.80f, 0.17f, 0.045f},
+    {0.66f, 0.30f, 0.05f, true}, {0.66f, 0.47f, 0.05f, true}, {0.66f, 0.64f, 0.05f, true}, {0.73f, 0.20f, 0.05f, true},
     {0.26f, 0.78f, 0.12f}, {0.74f, 0.78f, 0.12f},
 }};
 // the standard's bigger, for a tablet or big thumbs
@@ -545,7 +568,21 @@ constexpr Layout kLarge = {{
     {0.08f, 0.215f, 0.052f}, {0.92f, 0.215f, 0.052f},
     {0.57f, 0.92f, 0.04f}, {0.43f, 0.92f, 0.04f}, {0.50f, 0.08f, 0.05f},
     {0.12f, 0.375f, 0.058f}, {0.12f, 0.625f, 0.058f}, {0.064f, 0.50f, 0.058f}, {0.176f, 0.50f, 0.058f},
+    {0.72f, 0.36f, 0.05f},
+    {0.66f, 0.30f, 0.05f, true}, {0.66f, 0.47f, 0.05f, true}, {0.66f, 0.64f, 0.05f, true}, {0.73f, 0.20f, 0.05f, true},
     {0.28f, 0.80f, 0.13f}, {0.70f, 0.80f, 0.13f},
+}};
+// as a mobile action RPG: a big attack button in the bottom right corner, Power, Launch and Jump close around it and
+// the four specials in a wider arc, the shoulders along the top, a small dpad under the left ones
+constexpr Layout kRpg = {{
+    {0.927f, 0.506f, 0.065f}, {0.763f, 0.76f, 0.065f}, {0.885f, 0.76f, 0.105f}, {0.815f, 0.539f, 0.065f},
+    {0.81f, 0.085f, 0.048f}, {0.19f, 0.085f, 0.048f},
+    {0.068f, 0.085f, 0.048f}, {0.932f, 0.085f, 0.048f},
+    {0.585f, 0.075f, 0.036f}, {0.415f, 0.075f, 0.036f}, {0.50f, 0.075f, 0.045f},
+    {0.10f, 0.25f, 0.042f}, {0.10f, 0.43f, 0.042f}, {0.06f, 0.34f, 0.042f}, {0.14f, 0.34f, 0.042f},
+    {0.955f, 0.27f, 0.04f},
+    {0.673f, 0.76f, 0.055f}, {0.702f, 0.525f, 0.055f}, {0.779f, 0.353f, 0.055f}, {0.878f, 0.29f, 0.055f},
+    {0.15f, 0.74f, 0.13f}, {0.55f, 0.75f, 0.10f},
 }};
 struct Preset {
     const char* id;
@@ -556,7 +593,8 @@ constexpr Preset kPresets[] = {{"default", "STANDARD", &kStandard},
                                {"top_bar", "TOP BAR", &kTopBar},
                                {"compact", "COMPACT", &kCompact},
                                {"low_shoulders", "LOW SHOULDERS", &kLowShoulders},
-                               {"large", "LARGE", &kLarge}};
+                               {"large", "LARGE", &kLarge},
+                               {"rpg", "RPG", &kRpg}};
 
 constexpr float kStickZone = 0.42f;    // share of the width from the left a touch takes the stick in
 constexpr float kFixedReach = 1.5f;    // FIXED sticks: their radii from the centre a touch takes them in
@@ -647,7 +685,7 @@ void LoadLayout() {
             pl.x = std::clamp(float((*p)["x"].value_or(double(pl.x))), 0.0f, 1.0f);
             pl.y = std::clamp(float((*p)["y"].value_or(double(pl.y))), 0.0f, 1.0f);
             pl.r = std::clamp(float((*p)["r"].value_or(double(pl.r))), 0.02f, 0.25f);
-            pl.hidden = (*p)["hidden"].value_or(false) && !IsStick(i) && !kButtons[i].keep;
+            pl.hidden = (*p)["hidden"].value_or(false) && Hideable(int(i));
         }
     } catch (...) {
     }
@@ -719,9 +757,10 @@ void Extent(size_t i, float& hw, float& hh) {
     hw = hh * (s == Shape::Tab ? kTabAspect : s == Shape::Pill ? kPillAspect : 1.0f);
 }
 
-// the editor's bar at the top: Reset, smaller and bigger for the picked control, Cancel, Done, in screen shares
-constexpr const char* kBarLabels[] = {"RESET", "-", "+", "CANCEL", "DONE"};
-enum { kBarReset, kBarSmaller, kBarBigger, kBarCancel, kBarDone, kBarCount };
+// the editor's bar at the top: Reset, smaller and bigger for the picked control, hide or show it, Cancel, Done, in
+// screen shares
+constexpr const char* kBarLabels[] = {"RESET", "-", "+", "HIDE", "CANCEL", "DONE"};
+enum { kBarReset, kBarSmaller, kBarBigger, kBarHide, kBarCancel, kBarDone, kBarCount };
 constexpr float kBarY = 0.17f, kBarH = 0.09f, kBarW = 0.13f, kBarGap = 0.02f;
 constexpr float kBarSizeW = 0.07f;                       // the - and + buttons
 constexpr float kMinRadius = 0.02f, kMaxRadius = 0.25f;  // a control's own radius, in screen heights
@@ -992,6 +1031,9 @@ void EditDown(Finger& f, float x, float y) {
                 Resize(size_t(g_selected), bar == kBarBigger ? r * kSizeStep : r / kSizeStep);
             }
             return;
+        case kBarHide:
+            if (Hideable(g_selected)) g_layout[size_t(g_selected)].hidden = !g_layout[size_t(g_selected)].hidden;
+            return;
         case kBarCancel:
             CloseEditor(false);
             return;
@@ -1071,7 +1113,7 @@ void FingerDown(SDL_FingerID id, float x, float y) {
     } else if (x < Width() * kStickZone) {
         f.role = Role::Stick;
     } else {
-        f.role = Role::Look;
+        f.role = g_layout[kRStick].hidden ? Role::None : Role::Look;
     }
     g_fingers.push_back(f);
     Recount();
@@ -1299,6 +1341,7 @@ void Apply(int port, input::Pad& pad) {
         used = true;
         if (p < kBit) pad.analog[p] = 0xFF;
         else pad.buttons |= uint16_t(1u << (p - kBit));
+        if (kButtons[i].rt) pad.analog[kAnalogRT] = 0xFF;
     }
     if (int p = MenuPress(); p >= 0) {
         used = true;
@@ -1397,6 +1440,12 @@ void DrawIcon(const Pen& p, Icon icon) {
             p.Line(-0.36f, -0.14f, 0, 0.22f);
             p.Line(0, 0.22f, 0.36f, -0.14f);
             break;
+        case Icon::Camera:  // a camera's body, its lens and the bump of its viewfinder
+            p.dl->AddRect(p.P(-0.44f, -0.24f), p.P(0.44f, 0.32f), p.col, 0.08f * p.r, 0, p.th);
+            p.Box(-0.18f, -0.36f, 0.12f, -0.24f, 0.03f);
+            p.Ring(0, 0.04f, 0.17f);
+            p.Dot(0.3f, -0.13f, 0.04f);
+            break;
     }
 }
 
@@ -1451,6 +1500,11 @@ Rgb ButtonColour(int press) {
 }
 
 void DrawStick(ImDrawList* dl, float th, size_t stick) {
+    // a hidden right stick: faint and crossed out in the editor, else not drawn
+    bool hidden = g_layout[stick].hidden;
+    if (hidden && !g_editing) return;
+    float opacity = g_opacity;
+    if (hidden) g_opacity *= 0.4f;
     // at rest in its place, else where the thumb came down
     float r = Radius(stick);
     ImVec2 at(g_layout[stick].x * Width(), g_layout[stick].y * Height());
@@ -1475,6 +1529,12 @@ void DrawStick(ImDrawList* dl, float th, size_t stick) {
     ImVec2 knob(at.x + sx * r, at.y - sy * r);
     dl->AddCircleFilled(knob, r * 0.42f, held ? Fade(kSaffron, 150) : Fade(60, 48, 36, 170), 48);
     dl->AddCircle(knob, r * 0.42f, Fade(kEdge, held ? 200 : 120), 48, th * 0.8f);
+    g_opacity = opacity;
+    if (hidden) {
+        float k = r * 0.35f;
+        dl->AddLine(ImVec2(at.x - k, at.y - k), ImVec2(at.x + k, at.y + k), IM_COL32(255, 80, 60, 220), th);
+        dl->AddLine(ImVec2(at.x - k, at.y + k), ImVec2(at.x + k, at.y - k), IM_COL32(255, 80, 60, 220), th);
+    }
 }
 
 // a text centred on a point, its height a share of the screen's
@@ -1524,7 +1584,7 @@ void DrawControl(ImDrawList* dl, size_t i, bool on, int fade, float th) {
     }
     float icon = b.shape == Shape::Square ? hh * 0.85f : hh;
     DrawIcon({dl, c, icon, on ? Fade(255, 255, 255, 240) : Fade(kCream, 200 * fade / 100), th}, b.icon);
-    if (Ps2() && b.press >= kAnalogA && b.press <= kAnalogY) {
+    if (Ps2() && !b.rt && b.press >= kAnalogA && b.press <= kAnalogY) {
         DrawPs2Symbol(dl, c, hh, b.press, on ? Fade(255, 255, 255, 255) : Fade(colour, 235 * fade / 100), th * 1.6f);
     } else if (b.icon == Icon::Text) {
         ImU32 text = on ? Fade(255, 255, 255, 255) : b.shape == Shape::Round ? Fade(colour, 235 * fade / 100)
@@ -1561,12 +1621,15 @@ void DrawEditorBar(ImDrawList* dl, float th) {
         BarAt(0, 0, r, i);
         bool done = i == kBarDone;
         bool size = i == kBarSmaller || i == kBarBigger;
-        int alpha = size && g_selected < 0 ? 90 : 240;  // - and + wait for a control to be picked
+        // - and + wait for a control to be picked, Hide for one that can be hidden
+        int alpha = (size && g_selected < 0) || (i == kBarHide && !Hideable(g_selected)) ? 90 : 240;
+        const char* label = i == kBarHide && Hideable(g_selected) && g_layout[size_t(g_selected)].hidden ? "SHOW"
+                                                                                                         : kBarLabels[i];
         dl->AddRectFilled(ImVec2(r[0], r[1]), ImVec2(r[2], r[3]),
                           done ? IM_COL32(150, 115, 45, 235) : IM_COL32(20, 18, 14, 225), h * 0.015f);
         dl->AddRect(ImVec2(r[0], r[1]), ImVec2(r[2], r[3]), IM_COL32(220, 180, 100, alpha), h * 0.015f, 0, th * 0.7f);
         CentredText(dl, ImVec2((r[0] + r[2]) / 2, (r[1] + r[3]) / 2), h * (size ? 0.06f : 0.042f),
-                    IM_COL32(255, 255, 255, alpha), app::Ui(kBarLabels[i]).c_str());
+                    IM_COL32(255, 255, 255, alpha), app::Ui(label).c_str());
     }
     CentredText(dl, ImVec2(Width() / 2, (kBarY + kBarH + 0.05f) * h), h * 0.036f, IM_COL32(255, 255, 255, 220),
                 app::Ui("DRAG TO MOVE, PINCH OR - + TO RESIZE").c_str());
