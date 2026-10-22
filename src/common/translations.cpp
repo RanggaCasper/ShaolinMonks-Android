@@ -52,6 +52,7 @@ constexpr Entry kEntries[] = {
     {"FILL", {u"Remplir", u"Füllen", u"Riempi", u"Rellenar", u"Penuh"}},
     {"HDR OUTPUT", {u"Sortie HDR", u"HDR-Ausgabe", u"Uscita HDR", u"Salida HDR", u"Keluaran HDR"}},
     {"MAX FRAME RATE", {u"Images par seconde max.", u"Max. Bildrate", u"Frame rate massimo", u"Fotogramas por segundo máx.", u"Frame rate maks."}},
+    {"BLOOM", {u"Flou lumineux", u"Bloom", u"Bloom", u"Resplandor", u"Bloom"}},
     {"ULTRAWIDE", {u"Format ultra-large", u"Ultrawide", u"Ultrawide", u"Ultrapanorámico", u"Ultrawide"}},
     {"FRAME SKIP", {u"Saut d'images", u"Bilder überspringen", u"Salto dei frame", u"Salto de fotogramas", u"Lewati frame"}},
     {"FPS COUNTER POSITION", {u"Position du compteur", u"Position der FPS-Anzeige", u"Posizione contatore FPS", u"Posición del contador", u"Posisi penghitung FPS"}},

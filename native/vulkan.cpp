@@ -541,6 +541,7 @@ struct DrawTextures {
     float k[4] = {1, 1, 1, 1};
     float wide[4] = {};
     bool blur[4] = {};
+    bool small = false;  // a stage reads a target smaller than the frame
 };
 
 struct DrawShaders {
@@ -786,6 +787,7 @@ void KeyRasterizer(const State& s, const Assembled& a, PsoKey& k) {
 }
 
 constexpr float kAlphaTestAlways = 7.0f;
+constexpr uint32_t kBlendOne = 1;  // D3DBLEND_ONE
 
 void FillFogConstants(const State& s, DrawConstants& c) {
     if (!s.rs[kRsFogEnable]) return;
@@ -2649,6 +2651,7 @@ VkImageView VulkanBackend::BindTargetTexture(const State& s, int stage, const Te
     Target* rt = draw_rt_;
     float k = float(t.w) / (t.gw * stages.k[stage]);
     bool blur = rt && t.gw < guest_w_ && rt->gw < guest_w_;
+    if (!t.depth && t.gw < guest_w_) stages.small = true;
     if (!t.depth && box && k > kUpscaledMin && rt && rt != &t && (blur || t.gw > rt->gw || t.gh > rt->gh)) {
         stages.wide[stage] = k;
         stages.blur[stage] = blur;
@@ -2864,6 +2867,10 @@ void VulkanBackend::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t
 
     DrawTextures stages;
     if (!BindStageTextures(s, stages) || !draw_rt_ && !draw_ds_) return;
+    // BLOOM off: the glow, the frame shrunk to 160x120 and blurred, is not added back onto the frame (ONE + ONE)
+    if (!game::Opt().bloom && stages.small && draw_rt_ && draw_rt_->gw == guest_w_ && draw_rt_->gh == guest_h_ &&
+        SimpleState(s, kMBlendEnable) && SimpleState(s, kMSrcBlend) == kBlendOne && SimpleState(s, kMDestBlend) == kBlendOne)
+        return;
     PixelKey pk = MakePixelKey(s, stages.info);
     sh.pkey = Hash(&pk, sizeof(pk));
     EnsurePixelShader(pk, sh);

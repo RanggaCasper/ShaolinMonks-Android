@@ -270,6 +270,7 @@ constexpr Row kGraphicsRows[] = {
     {Kind::Heading, -1, "QUALITY"},
     {Kind::Value, kAniso, "ANISOTROPIC FILTERING"},
     {Kind::Value, kAntiAliasing, "ANTI-ALIASING"},
+    {Kind::Value, kBloom, "BLOOM"},
     {Kind::Value, kScreenFilter, "SCREEN FILTER"},
 };
 
@@ -335,6 +336,7 @@ bool* ToggleFlag(Settings& s, int id) {
         case kFpsTemps: return &o.fps_temps;
         case kFpsUsage: return &o.fps_usage;
         case kReloadBlur: return &o.reload_blur;
+        case kBloom: return &o.bloom;
         case kSkipIntros: return &o.skip_intros;
         case kInvertMouse: return &o.invert_mouse;
         case kHoldAim: return &o.hold_aim;

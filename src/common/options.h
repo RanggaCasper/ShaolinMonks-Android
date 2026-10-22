@@ -32,6 +32,7 @@ struct Options {
     uint32_t aspect_ratio = 0;  // the frame's shape in hundredths (133 is 4:3), 0 the whole screen; common/aspect.h
     bool ultrawide = false;     // a frame wider than 4:3 shows more of the sides instead of stretching, common/aspect.h
     bool reload_blur = true;
+    bool bloom = true;  // the glow added over the frame, native/vulkan.cpp skips it when off
     uint32_t draw_distance = 1;  // times the game's LOD and draw distances
     float mouse_sensitivity = 1.0f;
     float touch_sensitivity = 1.0f;  // the touch screen's look, apart from the mouse's
