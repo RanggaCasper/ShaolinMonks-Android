@@ -4,8 +4,10 @@ import android.Manifest;
 import android.app.AlertDialog;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.net.Uri;
+import android.os.BatteryManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
@@ -152,6 +154,13 @@ public class ShaolinMonksActivity extends SDLActivity {
                         .show();
             });
         });
+    }
+
+    // the performance overlay's fallback temperature, in tenths of a degree, -1 unknown: an app may not read the
+    // thermal zones, the battery's sticky broadcast it always may
+    public int batteryTemperature() {
+        Intent i = registerReceiver(null, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
+        return i != null ? i.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, -1) : -1;
     }
 
     @Override

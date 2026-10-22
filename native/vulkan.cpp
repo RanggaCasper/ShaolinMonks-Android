@@ -980,6 +980,8 @@ private:
         size_t pool_at = 0;  // the descriptor pool sets come from
         std::unordered_map<uint64_t, VkDescriptorSet> sets;
         VkSemaphore acquire = VK_NULL_HANDLE;
+        VkQueryPool times = VK_NULL_HANDLE;  // the command buffer's start and end on the GPU, for its load
+        bool timed = false;                  // submitted with both written
     };
     struct Alloc {
         VkBuffer buf;
@@ -1184,7 +1186,12 @@ private:
     double fps_ = 0;
     std::chrono::steady_clock::time_point fps_t_ = std::chrono::steady_clock::now();
     uint64_t fps_n_ = 0;
+    uint32_t time_bits_ = 0;  // the queue's valid timestamp bits, 0 without timestamps
+    double gpu_ns_ = 0;       // GPU time of the command buffers done since the load was last worked out
 };
+
+// percent of the time the GPU was running the frames' commands, -1 without timestamps; host::VulkanGpuLoad
+std::atomic<float> g_gpu_load{-1};
 
 #define VK_CHECK(x)                                                    \
     do {                                                               \
@@ -1295,6 +1302,7 @@ bool VulkanBackend::PickDevice() {
             props_ = p;
             api_ = api;
             qfam_ = q;
+            time_bits_ = qs[q].timestampValidBits;
             dev_exts_ = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
             auto want = [&](const char* name) {
                 if (HasExtension(ext, name)) dev_exts_.push_back(name);
@@ -1555,6 +1563,12 @@ bool VulkanBackend::CreateFrames() {
             return false;
         VkSemaphoreCreateInfo bi{VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
         VK_CHECK(vkCreateSemaphore(dev_, &bi, nullptr, &f.acquire));
+        if (time_bits_) {
+            VkQueryPoolCreateInfo qi{VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO};
+            qi.queryType = VK_QUERY_TYPE_TIMESTAMP;
+            qi.queryCount = 2;
+            if (vkCreateQueryPool(dev_, &qi, nullptr, &f.times) != VK_SUCCESS) f.times = VK_NULL_HANDLE;
+        }
     }
     return true;
 }
@@ -1740,6 +1754,10 @@ void VulkanBackend::Begin() {
     VkCommandBufferBeginInfo bi{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
     bi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
     vkBeginCommandBuffer(Cb(), &bi);
+    if (VkQueryPool q = CurrentFrame().times) {
+        vkCmdResetQueryPool(Cb(), q, 0, 2);
+        vkCmdWriteTimestamp(Cb(), VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, q, 0);
+    }
     rendering_ = false;
     rend_color_ = rend_depth_ = nullptr;
 }
@@ -1804,6 +1822,15 @@ void VulkanBackend::WaitValue(uint64_t v) {
 // the frame's garbage freed and its pools reset, once the GPU is past it
 void VulkanBackend::ResetFrame(Frame& f) {
     WaitValue(f.value);
+    if (f.timed) {
+        f.timed = false;
+        uint64_t t[2];
+        if (vkGetQueryPoolResults(dev_, f.times, 0, 2, sizeof(t), t, sizeof(t[0]), VK_QUERY_RESULT_64_BIT) ==
+            VK_SUCCESS) {
+            uint64_t mask = time_bits_ >= 64 ? ~0ull : (1ull << time_bits_) - 1;
+            gpu_ns_ += double((t[1] - t[0]) & mask) * props_.limits.timestampPeriod;
+        }
+    }
     for (Image& im : f.images) Destroy(im);
     for (Buffer& b : f.buffers) Destroy(b);
     f.images.clear();
@@ -1818,6 +1845,10 @@ void VulkanBackend::ResetFrame(Frame& f) {
 void VulkanBackend::Submit(bool wait, bool present) {
     EndRender();
     Frame& f = CurrentFrame();
+    if (f.times) {
+        vkCmdWriteTimestamp(f.cb, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, f.times, 1);
+        f.timed = true;
+    }
     vkEndCommandBuffer(f.cb);
     uint64_t signal = ++value_;
     // without the timeline only the present semaphore is signalled, and a fence tells when the GPU is past
@@ -3283,6 +3314,8 @@ void VulkanBackend::Present(const Surface& front) {
         fps_ = fps_n_ / el;
         fps_n_ = 0;
         fps_t_ = now;
+        if (time_bits_) g_gpu_load = float(std::min(100.0, gpu_ns_ / (el * 1e7)));
+        gpu_ns_ = 0;
     }
     if (presents_ % 600 == 0) SavePipelineCache();
     ApplySettings();
@@ -3306,3 +3339,7 @@ void WaitGpuFrame(uint64_t n) {
 }
 
 }  // namespace gpu
+
+namespace host {
+float VulkanGpuLoad() { return gpu::g_gpu_load.load(std::memory_order_relaxed); }
+}  // namespace host

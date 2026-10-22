@@ -47,6 +47,13 @@ void EditLayout();
 // native/update.cpp: the activity asks GitHub for a newer release and says what it found
 namespace host {
 void CheckForUpdates();
+// native/stats.cpp: the performance overlay's numbers, percent and degrees, -1 where the device does not tell
+void SamplePerf();
+float CpuLoad();
+float GpuLoad();
+float CpuTemp();
+float GpuTemp();
+float BatteryTemp();
 }  // namespace host
 
 namespace app {
@@ -89,6 +96,11 @@ constexpr uint32_t kScreenFilters[] = {0, 1, 2, 3, 4};
 const char* const kScreenFilterNames[] = {"OFF", "SHARPEN", "VIVID", "SCANLINES", "CRT"};
 constexpr uint32_t kAntiAliasings[] = {game::kAaOff, game::kAaFxaa, game::kAaSsaa};
 const char* const kAntiAliasingNames[] = {"OFF", "FXAA", "SSAA 2X"};
+// the counter's place on the screen, Options::fps_position; top centre is under the settings gear
+enum FpsPosition : uint32_t { kFpsTop, kFpsTopLeft, kFpsTopRight, kFpsBottomLeft, kFpsBottom, kFpsBottomRight };
+constexpr uint32_t kFpsPositions[] = {kFpsTop, kFpsTopLeft, kFpsTopRight, kFpsBottomLeft, kFpsBottom, kFpsBottomRight};
+const char* const kFpsPositionNames[] = {"TOP CENTER", "TOP LEFT", "TOP RIGHT", "BOTTOM LEFT", "BOTTOM CENTER",
+                                         "BOTTOM RIGHT"};
 constexpr uint32_t kAudioOutputs[] = {audio::kOutputAuto, audio::kOutputMono, audio::kOutputStereo,
                                       audio::kOutputSurround};
 const char* const kAudioOutputNames[] = {"AUTOMATIC", "MONO", "2.0 STEREO", "5.1 SURROUND"};
@@ -249,6 +261,9 @@ constexpr Row kGraphicsRows[] = {
     {Kind::Value, kMaxFps, "MAX FRAME RATE"},
     {Kind::Value, kFrameSkip, "FRAME SKIP"},
     {Kind::Value, kFpsCounter, "FPS COUNTER"},
+    {Kind::Value, kFpsPosition, "FPS COUNTER POSITION"},
+    {Kind::Value, kFpsUsage, "SHOW CPU / GPU USAGE"},
+    {Kind::Value, kFpsTemps, "SHOW TEMPERATURES"},
     {Kind::Heading, -1, "QUALITY"},
     {Kind::Value, kAniso, "ANISOTROPIC FILTERING"},
     {Kind::Value, kAntiAliasing, "ANTI-ALIASING"},
@@ -312,6 +327,8 @@ bool* ToggleFlag(Settings& s, int id) {
         case kVsync: return &s.vsync;
         case kFpsCounter: return &o.fps_counter;
         case kFrameSkip: return &o.frame_skip;
+        case kFpsTemps: return &o.fps_temps;
+        case kFpsUsage: return &o.fps_usage;
         case kReloadBlur: return &o.reload_blur;
         case kSkipIntros: return &o.skip_intros;
         case kInvertMouse: return &o.invert_mouse;
@@ -402,6 +419,9 @@ bool StepGraphicsRow(int id, int step, Settings& s, char (&text)[64]) {
             return true;
         case kScreenFilter:
             std::snprintf(text, sizeof(text), "%s", kScreenFilterNames[StepTable(kScreenFilters, o.screen_filter, step)]);
+            return true;
+        case kFpsPosition:
+            std::snprintf(text, sizeof(text), "%s", kFpsPositionNames[StepTable(kFpsPositions, o.fps_position, step)]);
             return true;
         case kDrawDistance:
             std::snprintf(text, sizeof(text), "%s", kDistanceNames[StepTable(kDistances, o.draw_distance, step)]);
@@ -842,19 +862,60 @@ void ToggleMenu() {
     if (open) input::ReleaseCursor();
 }
 
-// the frame rate in the top left corner, over the game
-void DrawFpsCounter(double fps) {
-    if (!game::Opt().fps_counter || MenuOpen()) return;
-    char text[16];
-    std::snprintf(text, sizeof(text), "%.0f FPS", fps);
-    ImDrawList* dl = ImGui::GetForegroundDrawList();
-    float size = ImGui::GetFontSize() * 1.5f;
-    // under the settings gear, which the touch controls keep at the middle of the top between Back and Start
-    ImVec2 ts = ImGui::GetFont()->CalcTextSizeA(size, FLT_MAX, 0, text);
-    ImVec2 at(ImGui::GetIO().DisplaySize.x / 2 - ts.x / 2, ImGui::GetIO().DisplaySize.y * 0.14f);
+// "CPU 40% 65°C", the parts the device tells
+void AppendPerf(std::string& line, const char* name, float load, float temp) {
+    if (load < 0 && temp < 0) return;
+    char part[48];
+    int n = std::snprintf(part, sizeof(part), "%s%s", line.empty() ? "" : "   ", name);
+    if (load >= 0) n += std::snprintf(part + n, sizeof(part) - n, " %.0f%%", load);
+    if (temp >= 0) std::snprintf(part + n, sizeof(part) - n, " %.0f\xC2\xB0" "C", temp);
+    line += part;
+}
+
+// a line of text with a drop shadow, its left edge at x
+void DrawShadowed(ImDrawList* dl, float size, ImVec2 at, ImU32 color, const char* text) {
     float shadow = std::max(2.0f, size / 12.0f);
     dl->AddText(ImGui::GetFont(), size, ImVec2(at.x + shadow, at.y + shadow), IM_COL32(0, 0, 0, 200), text);
-    dl->AddText(ImGui::GetFont(), size, at, IM_COL32(255, 214, 90, 255), text);
+    dl->AddText(ImGui::GetFont(), size, at, color, text);
+}
+
+// the frame rate, and under it the CPU's and GPU's load and temperatures and the battery's, over the game at the
+// place Options::fps_position picks
+void DrawFpsCounter(double fps) {
+    const game::Options& o = game::Opt();
+    if (!o.fps_counter || MenuOpen()) return;
+    host::SamplePerf();
+    char text[16];
+    std::snprintf(text, sizeof(text), "%.0f FPS", fps);
+    std::string perf;
+    AppendPerf(perf, "CPU", o.fps_usage ? host::CpuLoad() : -1, o.fps_temps ? host::CpuTemp() : -1);
+    AppendPerf(perf, "GPU", o.fps_usage ? host::GpuLoad() : -1, o.fps_temps ? host::GpuTemp() : -1);
+    if (o.fps_temps) AppendPerf(perf, "BAT", -1, host::BatteryTemp());
+
+    ImDrawList* dl = ImGui::GetForegroundDrawList();
+    ImVec2 screen = ImGui::GetIO().DisplaySize;
+    float big = ImGui::GetFontSize() * 1.5f, small = ImGui::GetFontSize();
+    ImVec2 fs = ImGui::GetFont()->CalcTextSizeA(big, FLT_MAX, 0, text);
+    ImVec2 ps = perf.empty() ? ImVec2(0, 0) : ImGui::GetFont()->CalcTextSizeA(small, FLT_MAX, 0, perf.c_str());
+    float block = fs.y + ps.y;
+    float margin = screen.y * 0.03f;
+    uint32_t pos = o.fps_position;
+    bool bottom = pos == kFpsBottomLeft || pos == kFpsBottom || pos == kFpsBottomRight;
+    // top centre sits under the settings gear, bottom centre over Back and Start, which the touch controls keep there
+    float y = pos == kFpsTop ? screen.y * 0.14f
+              : pos == kFpsBottom ? screen.y * 0.86f - block
+              : bottom ? screen.y - margin - block
+                       : margin;
+    // left, centred or right aligned, each line on its own; the top corners clear the touch controls' White and
+    // Black, the bottom ones have the edge free
+    float side = bottom ? margin : screen.x * 0.13f;
+    auto x = [&](float w) {
+        if (pos == kFpsTopLeft || pos == kFpsBottomLeft) return side;
+        if (pos == kFpsTopRight || pos == kFpsBottomRight) return screen.x - side - w;
+        return screen.x / 2 - w / 2;
+    };
+    if (!perf.empty()) DrawShadowed(dl, small, ImVec2(x(ps.x), y + fs.y), IM_COL32(235, 235, 235, 255), perf.c_str());
+    DrawShadowed(dl, big, ImVec2(x(fs.x), y), IM_COL32(255, 214, 90, 255), text);
 }
 
 void DrawUi(double fps) {
