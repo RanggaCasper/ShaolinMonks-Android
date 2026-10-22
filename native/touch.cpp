@@ -1,8 +1,8 @@
 // Android's input on port 0 beside the controllers: the touch controls, and a keyboard when one is plugged in, as an
 // Xbox controller. It is src/common/mouse_keyboard.h. SDL's keys arrive as the virtual keys of common/keys.h.
 //
-// The left of the screen is the left stick, a drag on the right is the right stick and the buttons press the
-// controller's: Shaolin Monks is played and its menus are driven with the pad alone.
+// The left stick's side of the screen is the left stick, a drag on the other is the right stick and the buttons press
+// the controller's: Shaolin Monks is played and its menus are driven with the pad alone.
 #include "common/mouse_keyboard.h"
 
 #include <SDL3/SDL.h>
@@ -638,8 +638,8 @@ Layout g_layout = kStandard;
 size_t g_preset = 0;
 float g_opacity = 0.85f;
 float g_scale = 1.0f;  // every control's size, on top of its own
-// STICK MODE: floating, the left of the screen the left stick and a drag on the right the right stick from wherever
-// the thumb lands; fixed, each stick where it is drawn alone, so a stray touch elsewhere moves nothing
+// STICK MODE: floating, the left stick's side of the screen the left stick and a drag on the other the right stick
+// from wherever the thumb lands; fixed, each stick where it is drawn alone, so a stray touch elsewhere moves nothing
 bool g_fixed_sticks = false;
 bool g_loaded = false;
 // the editor: the layout before it opened (for Cancel), the control picked
@@ -836,6 +836,14 @@ void StickOf(const Finger& f, float& x, float& y, size_t stick = kStick) {
 }
 
 void UpdateStick(const Finger& f) { StickOf(f, g_stick_x, g_stick_y); }
+
+// FLOATING: the left stick's zone is the side of the screen it is placed on, kStickZone of the width at least and out
+// to its place's reach, so a stick moved in the editor still takes the touches where it is drawn
+bool InStickZone(float x) {
+    float w = Width(), cx = g_layout[kStick].x * w, reach = Radius(kStick) * kFixedReach;
+    if (g_layout[kStick].x <= 0.5f) return x < std::max(w * kStickZone, cx + reach);
+    return x > std::min(w * (1 - kStickZone), cx - reach);
+}
 
 // FIXED sticks: the one a touch came down near, its deflection from the centre; kPlaces for none
 size_t FixedStickAt(float x, float y) {
@@ -1052,12 +1060,16 @@ void EditDown(Finger& f, float x, float y) {
         f.y0 = g_layout[d.button].r;
         return;
     }
+    // kPlaces for none: kButtonCount, HitButton's none, is the left stick's place
     size_t b = HitButton(x, y);
-    for (size_t s : {kStick, kRStick}) {
-        float sx = g_layout[s].x * Width(), sy = g_layout[s].y * Height(), sr = Radius(s);
-        if (b == kButtonCount && (x - sx) * (x - sx) + (y - sy) * (y - sy) <= sr * sr) b = s;
-    }
     if (b == kButtonCount) {
+        b = kPlaces;
+        for (size_t s : {kStick, kRStick}) {
+            float sx = g_layout[s].x * Width(), sy = g_layout[s].y * Height(), sr = Radius(s);
+            if (b == kPlaces && (x - sx) * (x - sx) + (y - sy) * (y - sy) <= sr * sr) b = s;
+        }
+    }
+    if (b == kPlaces) {
         g_selected = -1;
         return;
     }
@@ -1110,7 +1122,7 @@ void FingerDown(SDL_FingerID id, float x, float y) {
             if (s == kStick) UpdateStick(f);
             else StickOf(f, g_rstick_x, g_rstick_y, kRStick);
         }
-    } else if (x < Width() * kStickZone) {
+    } else if (InStickZone(x)) {
         f.role = Role::Stick;
     } else {
         f.role = g_layout[kRStick].hidden ? Role::None : Role::Look;
