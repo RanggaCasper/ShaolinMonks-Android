@@ -26,7 +26,7 @@ void MenuFrame();
 bool CurrentMenu(MenuList& out);
 
 // The button prompts on the screen (src/game/prompts.cpp): an icon and its label, tapped as the button
-enum PromptButton { kPromptA, kPromptB, kPromptX, kPromptY, kPromptL, kPromptR, kPromptGrey, kPromptBlack };
+enum PromptButton { kPromptA, kPromptB, kPromptX, kPromptY, kPromptL, kPromptR, kPromptGrey, kPromptBlack, kPromptWhite };
 struct Prompt {
     int button;  // PromptButton, kPromptGrey never
     float x0, y0, x1, y1;  // guest pixels: the icon and its label

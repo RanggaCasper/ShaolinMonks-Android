@@ -1665,7 +1665,10 @@ void DrawGameIcons(float th) {
             DrawPs2Symbol(dl, c, r * 1.05f, p.button, IM_COL32(col.r, col.g, col.b, 255), line * 1.3f);
             continue;
         }
-        const char* text = p.button == game::kPromptL ? "L1" : p.button == game::kPromptR ? "R1" : "R2";
+        const char* text = p.button == game::kPromptL       ? "L1"
+                           : p.button == game::kPromptR     ? "R1"
+                           : p.button == game::kPromptWhite ? "L2"
+                                                            : "R2";
         float hw = r * 1.15f, hh = r * 0.8f;
         dl->AddRectFilled(ImVec2(c.x - hw, c.y - r * 1.04f), ImVec2(c.x + hw, c.y + r * 1.04f), IM_COL32(18, 18, 22, 255),
                           r * 0.35f);

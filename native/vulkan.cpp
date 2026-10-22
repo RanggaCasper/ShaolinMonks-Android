@@ -3408,6 +3408,12 @@ void WaitGpuFrame(uint64_t n) {
     if (g_vulkan) g_vulkan->WaitGpuFrame(n);
 }
 
+// DXT1, 3 or 5 blocks as BGRA texels, for src/game/prompts.cpp's icons
+void DecodeBlocks(Host host, const std::vector<uint8_t>& in, uint32_t row_pitch, uint32_t w, uint32_t h,
+                  std::vector<uint8_t>& out) {
+    DecodeDxt(host, in, row_pitch, w, h, 1, out);
+}
+
 }  // namespace gpu
 
 namespace host {

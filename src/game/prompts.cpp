@@ -16,6 +16,11 @@
 #include "kernel/kernel.h"
 #include "kernel/memory.h"
 
+namespace gpu {
+void DecodeBlocks(Host host, const std::vector<uint8_t>& in, uint32_t row_pitch, uint32_t w, uint32_t h,
+                  std::vector<uint8_t>& out);  // native/vulkan.cpp
+}  // namespace gpu
+
 namespace game {
 
 namespace {
@@ -24,6 +29,7 @@ namespace {
 struct Icon {
     float x0, y0, x1, y1;
     int button;  // PromptButton
+    bool font = false;  // a glyph of the font's atlas
 };
 
 constexpr float kMinIcon = 8, kMaxIcon = 48;  // guest pixels an icon's side measures
@@ -41,7 +47,8 @@ int64_t g_icons_ms = 0;
 // a texture's level 0 as BGRA, decoded once: the prompts' icons are the same few small textures every frame
 struct Decoded {
     uint32_t w = 0, h = 0;
-    std::vector<uint8_t> bgra;  // empty when the format does not decode to BGRA (block compressed)
+    std::vector<uint8_t> bgra;  // empty when the format does not decode to BGRA
+    bool blocks = false;        // DXT: the font's atlas, whose button glyphs sit among its letters
 };
 const Decoded* DecodedTexture(uint32_t header) {
     static std::map<std::pair<uint32_t, uint32_t>, Decoded> cache;
@@ -52,11 +59,20 @@ const Decoded* DecodedTexture(uint32_t header) {
     if (it != cache.end()) return &it->second;
     if (cache.size() > 64) cache.clear();
     Decoded& out = cache[key];
-    if (gpu::Format(d.format).host != gpu::Host::BGRA8) return &out;
+    gpu::Host host = gpu::Format(d.format).host;
+    bool blocks = host == gpu::Host::BC1 || host == gpu::Host::BC2 || host == gpu::Host::BC3;
+    if (host != gpu::Host::BGRA8 && !blocks) return &out;
     uint32_t pitch = 0;
     gpu::DecodeLevel(d, 0, 0, static_cast<const uint8_t*>(kernel::HostPtr(d.data)), nullptr, out.bgra, pitch);
     out.w = d.width;
     out.h = d.height;
+    out.blocks = blocks;
+    if (blocks) {
+        std::vector<uint8_t> raw;
+        raw.swap(out.bgra);
+        gpu::DecodeBlocks(host, raw, pitch, d.width, d.height, out.bgra);
+        pitch = d.width * 4;
+    }
     if (pitch != d.width * 4) out.bgra.clear();
     return &out;
 }
@@ -78,13 +94,29 @@ int Classify(uint32_t header, float u0, float v0, float u1, float v1) {
     if (n < 4) return -1;
     double cover = n / (kSteps * kSteps);
     r /= n * 255, g /= n * 255, b /= n * 255;
-    float hi = float(std::max({r, g, b})), lo = float(std::min({r, g, b}));
+    // doubles, as the channels are: a float's rounding up would fail r >= hi for the channel that is the highest
+    double hi = std::max({r, g, b}), lo = std::min({r, g, b});
     // the Black button's: a dark grey disc, about the share of its square a circle takes
-    if (hi < 0.3f) return hi >= 0.04f && hi - lo < 0.1f && cover > 0.6 && cover < 0.9 ? kPromptBlack : -1;
+    bool disc = cover > 0.6 && cover < 0.9;
+    if (hi < 0.3f) return hi >= 0.04f && hi - lo < 0.1f && disc ? kPromptBlack : -1;
+    // the font's grey glyphs: the Black button's dark disc, the triggers' L and R told apart by their place in its
+    // atlas; its letters are pure white and thin, no disc
+    if (t->blocks && hi - lo < 0.12f) {
+        if (!disc || hi >= 0.8f) return -1;
+        if (hi < 0.45f) return kPromptBlack;  // the Black button's disc, darker in the font than the triggers' tabs
+        if (std::fabs(v0 - 0.412f) > 0.01f) return -1;
+        if (std::fabs(u0 - 0.738f) < 0.01f) return kPromptL;
+        if (std::fabs(u0 - 0.820f) < 0.01f) return kPromptR;
+        return -1;
+    }
     if (hi - lo < 0.12f) return kPromptGrey;
+    // a button is a disc: a square filled to its corners is a piece of the HUD's frame (the red around the portrait)
+    if (cover > 0.95) return -1;
     if (g >= hi && g > r * 1.3 && g > b * 1.3) return kPromptA;
-    if (r >= hi && g > b * 1.6 && g > r * 0.6) return kPromptY;
-    if (r >= hi && r > g * 1.5 && r > b * 1.5) return kPromptB;
+    // yellow: green near red's; the save slots' brown medallion has much less
+    if (r >= hi && g > b * 1.6 && g > r * 0.75) return kPromptY;
+    // red, even with the font's white letter over much of the disc; the save slots' brown medallion has more green
+    if (r >= hi && g < r * 0.55 && b < r * 0.55) return kPromptB;
     if (b >= hi && b > r * 1.2) return kPromptX;
     return -1;
 }
@@ -96,7 +128,8 @@ void PromptQuad(uint32_t texture, float x0, float y0, float x1, float y1, float 
     if (!texture || w < kMinIcon || h < kMinIcon || w > kMaxIcon || h > kMaxIcon || w > h * 1.6f || h > w * 1.6f)
         return;
     int button = Classify(texture, std::min(u0, u1), std::min(v0, v1), std::max(u0, u1), std::max(v0, v1));
-    if (button >= 0) g_icons.push_back({x0, y0, x1, y1, button});
+    const Decoded* t = DecodedTexture(texture);
+    if (button >= 0) g_icons.push_back({x0, y0, x1, y1, button, t && t->blocks});
 }
 
 void PromptFrame() {
@@ -123,7 +156,7 @@ void PromptFrame() {
             i.button = unique[size_t(pair)].x0 > i.x0 ? kPromptL : kPromptR;
         }
         shown.push_back({i.button, i.x0, i.y0, i.x1, i.y1});
-        if (i.button == kPromptBlack) continue;
+        if (i.button == kPromptBlack || i.button == kPromptWhite) continue;
         // the label runs right to the next icon on the row
         float reach = i.x1 + kLabelReach;
         for (const Icon& n : unique)
@@ -136,7 +169,7 @@ void PromptFrame() {
         if (NowMs() - logged > 2000) {
             logged = NowMs();
             std::string l;
-            static const char* kNames[] = {"A", "B", "X", "Y", "L", "R", "grey", "black"};
+            static const char* kNames[] = {"A", "B", "X", "Y", "L", "R", "grey", "black", "white"};
             for (const Prompt& p : out) {
                 char b[64];
                 std::snprintf(b, sizeof b, " %s %.0f,%.0f..%.0f,%.0f", kNames[p.button], p.x0, p.y0, p.x1, p.y1);
