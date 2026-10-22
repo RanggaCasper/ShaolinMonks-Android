@@ -2,7 +2,9 @@
 // hooks go here, [[hook]] entries in config/game.toml and X86_FUNC replacements of recompiled functions.
 #include <chrono>
 #include <cmath>
+#include <cstring>
 
+#include "common/aspect.h"
 #include "common/options.h"
 #include "cpu/x86_context.h"
 #include "kernel/kernel.h"
@@ -58,3 +60,15 @@ void FrameSkip(X86Context&, uint8_t*) {
     due += kStep;
 }
 
+// The cameras draw a view made for a 4:3 screen whatever the shape it is shown at: the screen's 640 by 480
+// (0x1245DC), and 1.2 for gameplay's. Wider settings stretched it. A camera of about 4:3 gets the shown frame's
+// aspect instead, the same height of view and more of the sides; render to texture cameras of other shapes keep
+// theirs.
+void WidenAspect(X86Context& ctx, uint8_t*) {
+    if (!game::Ultrawide()) return;
+    float aspect;
+    std::memcpy(&aspect, &ctx.eax, 4);
+    if (aspect < 1.15f || aspect > 1.4f) return;
+    aspect = game::Aspect();
+    std::memcpy(&ctx.eax, &aspect, 4);
+}

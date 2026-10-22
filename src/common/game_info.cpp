@@ -83,6 +83,7 @@ const app::GameInfo app::kGame = {
     .images = {{"default.xbe", "ShaolinMonks"}},
     .options = {{"fps_counter", &game::Opt().fps_counter, nullptr},
                 {"frame_skip", &game::Opt().frame_skip, nullptr},
+                {"ultrawide", &game::Opt().ultrawide, nullptr},
                 {"fps_usage", &game::Opt().fps_usage, nullptr},
                 {"fps_temps", &game::Opt().fps_temps, nullptr},
                 {"fps_position", nullptr, &game::Opt().fps_position},

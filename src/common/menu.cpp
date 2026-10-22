@@ -256,6 +256,7 @@ constexpr Row kGraphicsRows[] = {
     {Kind::Heading, -1, "DISPLAY"},
     {Kind::Value, kRenderResolution, "RENDER RESOLUTION"},
     {Kind::Value, kAspectRatio, "ASPECT RATIO"},
+    {Kind::Value, kUltrawide, "ULTRAWIDE"},
     {Kind::Heading, -1, "PERFORMANCE"},
     {Kind::Value, kVsync, "VERTICAL SYNC"},
     {Kind::Value, kMaxFps, "MAX FRAME RATE"},
@@ -327,6 +328,7 @@ bool* ToggleFlag(Settings& s, int id) {
         case kVsync: return &s.vsync;
         case kFpsCounter: return &o.fps_counter;
         case kFrameSkip: return &o.frame_skip;
+        case kUltrawide: return &o.ultrawide;
         case kFpsTemps: return &o.fps_temps;
         case kFpsUsage: return &o.fps_usage;
         case kReloadBlur: return &o.reload_blur;

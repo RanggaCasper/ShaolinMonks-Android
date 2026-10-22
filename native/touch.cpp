@@ -1546,7 +1546,14 @@ void DrawGameIcons(float th) {
     float w = Width(), h = Height();
     float aspect = game::Aspect();
     float vw = std::min(w, h * aspect), vh = vw / aspect;
-    float k = vw / 640.0f, ox = (w - vw) / 2, oy = (h - vh) / 2;
+    float ox = (w - vw) / 2, oy = (h - vh) / 2;
+    // ULTRAWIDE draws the game's 2D 4:3 in the middle of the frame (native/vulkan.cpp's Flatten), its prompts too
+    if (game::Ultrawide()) {
+        float narrow = vh * 4.0f / 3.0f;
+        ox += (vw - narrow) / 2;
+        vw = narrow;
+    }
+    float k = vw / 640.0f;
     for (const game::Prompt& p : icons) {
         ImVec2 c(ox + (p.x0 + p.x1) / 2 * k, oy + (p.y0 + p.y1) / 2 * vh / 480.0f);
         float r = std::min(p.x1 - p.x0, p.y1 - p.y0) / 2 * k;

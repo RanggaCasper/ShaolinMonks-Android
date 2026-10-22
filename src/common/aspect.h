@@ -42,6 +42,9 @@ inline float Aspect() {
         if (a.code == code && a.ratio > 0) return a.ratio;
     return ScreenAspect();
 }
+// the ULTRAWIDE setting: the cameras take the frame's aspect (src/game/game.cpp's WidenAspect) and the 2D is drawn
+// 4:3 in its middle (native/vulkan.cpp's Flatten); off, the 4:3 picture is stretched to the frame as the console did
+inline bool Ultrawide() { return Opt().ultrawide && Aspect() > 4.0f / 3.0f + 0.01f; }
 // the share of the frame's width a 4:3 picture takes
 inline float Narrow() { return 4.0f / 3.0f / Aspect(); }
 inline bool Wide() { return Aspect() > 1.34f; }

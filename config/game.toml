@@ -316,3 +316,9 @@ XPP_MemoryUnitType          = 0
 [[hook]]
 at = 0x0CB800
 call = "FrameSkip"
+
+# a camera's update (0x124150) has the aspect for D3DXMatrixPerspectiveFovLH in eax: the screen's 4:3 is
+# widened to the shown frame's, for a wider view instead of a stretched one
+[[hook]]
+at = 0x12432E
+call = "WidenAspect"

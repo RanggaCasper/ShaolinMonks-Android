@@ -488,6 +488,7 @@ struct Target {
     uint32_t gw = 0, gh = 0, w = 0, h = 0;
     uint32_t data = 0, bytes = 0;
     uint64_t epoch = 0, sig = 0;  // last lock seen, guest memory as last matched
+    uint64_t sides = ~0ull;       // the present whose first draw found its wide frame's sides cleared
     bool drawn = false;           // the GPU wrote it since the last readback
     std::vector<uint8_t> read;    // what Sync left in guest memory
     Image fb;                     // copy read by draws that sample the target they render to
@@ -556,14 +557,49 @@ struct GuestExtent {
 
 // ---- what the console's state asks of a draw
 
+// screen space to clip space in the epilogue; 2D drawn narrower by ext.x (Flatten) where it is set
+const std::string kClipX = "    q.x = p.x * 2 / surf.x - 1;\n";
+
+void ReplaceOnce(std::string& src, const std::string& from, const std::string& to) {
+    size_t at = src.find(from);
+    if (at != std::string::npos) src.replace(at, from.size(), to);
+}
+
 // the game's 2D layer leaves oPos.w at 0: screen space, drawn with w = 1 as XYZRHW is
 std::string VertexProgram(const VertexShader& vs, uint16_t regs, uint64_t decode) {
-    const std::string clamp = "    p.w = magclamp(p.w);\n";
-    const std::string screen_space = "    p.w = p.w == 0 ? 1 : magclamp(p.w);\n";
     std::string src = VertexProgramHlsl(vs.program, regs, decode);
-    size_t at = src.find(clamp);
-    if (at != std::string::npos) src.replace(at, clamp.size(), screen_space);
+    // flat: screen space (w 0) or an orthographic 2D projection (w 1, the text); the cameras' near plane is at 100
+    ReplaceOnce(src, "    p.w = magclamp(p.w);\n",
+                "    bool flat = p.w == 0 || p.w == 1;\n    p.w = p.w == 0 ? 1 : magclamp(p.w);\n");
+    ReplaceOnce(src, kClipX, "    q.x = (p.x * 2 / surf.x - 1) * (flat && ext.x > 0 ? ext.x : 1);\n");
     return src;
+}
+
+// 2D in the game's frame shown wider than 4:3, which its cameras fill (src/game/game.cpp's WidenAspect): drawn at
+// 4:3 in the middle, as made, instead of stretched. A draw across the whole width, a fade or a glow's blend back,
+// still covers it, and so does a program reading a target, a full screen pass. 1 for no change
+float Flatten(const Assembled& a, const DrawTextures& stages, bool prog, uint32_t w, uint32_t h, uint32_t frame_w,
+              uint32_t frame_h) {
+    float aspect = game::Aspect();
+    if (!game::Ultrawide() || w != frame_w || h != frame_h || !(a.regs & 1)) return 1.0f;
+    if (prog && (stages.rt[0] || stages.rt[1] || stages.rt[2] || stages.rt[3])) return 1.0f;
+    // a program's inputs are not screen positions: its draws are told apart in the shader
+    if (prog) return 4.0f / 3.0f / aspect;
+    const VertexElement& e = a.elements[0];
+    const VertexBuffer& vb = a.buffers[e.buffer];
+    bool floats = e.format == DXGI_FORMAT_R32G32B32A32_FLOAT || e.format == DXGI_FORMAT_R32G32B32_FLOAT ||
+                  e.format == DXGI_FORMAT_R32G32_FLOAT;
+    if (floats && vb.src && vb.stride && a.vertex_count && uint64_t(a.vertex_count) * vb.stride <= vb.bytes) {
+        float lo = 1e9f, hi = -1e9f;
+        for (uint32_t v = 0; v < a.vertex_count; v++) {
+            float x;
+            std::memcpy(&x, vb.src + size_t(v) * vb.stride + e.offset, sizeof(x));
+            lo = std::min(lo, x);
+            hi = std::max(hi, x);
+        }
+        if (hi - lo >= float(w) * 0.9f) return 1.0f;
+    }
+    return 4.0f / 3.0f / aspect;
 }
 
 // a point list writes its size: Vulkan leaves it undefined otherwise; empty when the source has no main to wrap
@@ -724,7 +760,9 @@ uint64_t VertexKey(const State& s, const Assembled& a, const DrawShaders& sh) {
 
 std::string VertexHlsl(const State& s, const Assembled& a, const DrawShaders& sh) {
     if (sh.prog) return VertexProgram(*s.vs, a.regs, a.decode);
-    return FixedVertexHlsl(a.regs, a.pretransformed, a.decode, sh.fk);
+    std::string src = FixedVertexHlsl(a.regs, a.pretransformed, a.decode, sh.fk);
+    if (a.pretransformed) ReplaceOnce(src, kClipX, "    q.x = (p.x * 2 / surf.x - 1) * (ext.x > 0 ? ext.x : 1);\n");
+    return src;
 }
 
 void KeyBlend(const State& s, PsoKey& k) {
@@ -2804,6 +2842,18 @@ void VulkanBackend::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t
     if (rt && ds && (rt->w != ds->w || rt->h != ds->h)) ds = nullptr;
     if (!rt && !ds) return;
     if (rt && LatchCpuWrite(*rt)) UploadTarget(*rt, s.rt);
+    // the game's 2D is drawn narrower than a wide frame (Flatten): menus drawn over the last frame without a clear
+    // would keep its pixels at the sides, so a frame sized target's first draw of each present finds them black;
+    // 3D drawn after covers them again
+    if (rt && rt->gw == guest_w_ && rt->gh == guest_h_ && rt->sides != presents_) {
+        rt->sides = presents_;
+        float narrow = 4.0f / 3.0f / game::Aspect();
+        if (game::Ultrawide()) {
+            int32_t w = int32_t(guest_w_), h = int32_t(guest_h_), side = int32_t(float(w) * (1.0f - narrow) / 2.0f);
+            int32_t rects[8] = {0, 0, side, h, w - side, 0, w, h};
+            ClearTarget(*rt, s, 2, reinterpret_cast<const uint8_t*>(rects), kClearTarget, 0xFF000000u, 1.0f, 0);
+        }
+    }
     draw_rt_ = rt;
     draw_ds_ = ds;
 
@@ -2841,6 +2891,7 @@ void VulkanBackend::Draw(const State& s, uint32_t prim, uint32_t start, uint32_t
         FillLightConstants(s, sh.fk, c);
     }
     std::memcpy(c.vattr, s.vattr.data(), sizeof(c.vattr));
+    c.ext[0] = Flatten(a, stages, sh.prog, size.w, size.h, guest_w_, guest_h_);
     Alloc vc = Constants(s.vsc.data(), sizeof(s.vsc));
     Alloc dc = Constants(&c, sizeof(c));
     VkBuffer vbufs[16];
