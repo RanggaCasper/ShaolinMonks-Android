@@ -82,6 +82,7 @@ const app::GameInfo app::kGame = {
                L"with the rest of the disc's files and folders beside it.",
     .images = {{"default.xbe", "ShaolinMonks"}},
     .options = {{"fps_counter", &game::Opt().fps_counter, nullptr},
+                {"frame_skip", &game::Opt().frame_skip, nullptr},
                 {"unlock_characters", &game::Opt().unlock_characters, nullptr},
                 {"unlock_extras", &game::Opt().unlock_extras, nullptr},
                 {"god_mode", &game::Opt().god_mode, nullptr},

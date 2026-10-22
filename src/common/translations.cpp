@@ -52,6 +52,7 @@ constexpr Entry kEntries[] = {
     {"FILL", {u"Remplir", u"Füllen", u"Riempi", u"Rellenar", u"Penuh"}},
     {"HDR OUTPUT", {u"Sortie HDR", u"HDR-Ausgabe", u"Uscita HDR", u"Salida HDR", u"Keluaran HDR"}},
     {"MAX FRAME RATE", {u"Images par seconde max.", u"Max. Bildrate", u"Frame rate massimo", u"Fotogramas por segundo máx.", u"Frame rate maks."}},
+    {"FRAME SKIP", {u"Saut d'images", u"Bilder überspringen", u"Salto dei frame", u"Salto de fotogramas", u"Lewati frame"}},
     {"FPS COUNTER", {u"Compteur d'images par seconde", u"FPS-Anzeige", u"Contatore FPS", u"Contador de FPS", u"Penghitung FPS"}},
     {"ANISOTROPIC FILTERING", {u"Filtrage anisotropique", u"Anisotropische Filterung", u"Filtro anisotropico", u"Filtro anisotrópico", u"Filter anisotropik"}},
     {"DRAW DISTANCE", {u"Distance d'affichage", u"Sichtweite", u"Distanza visiva", u"Distancia de dibujado", u"Jarak pandang"}},

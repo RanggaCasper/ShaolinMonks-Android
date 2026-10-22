@@ -232,7 +232,9 @@ enum RowId { kRenderResolution, kMaxFps, kVsync, kFpsCounter, kAniso, kReloadBlu
              kFmvScale, kGyro, kGyroSensitivity, kTouchLayout, kTouchOpacity, kTouchSize, kTouchEdit,
              kInfiniteAmmo, kRapidFire, kNoRecoil, kGameSpeed, kGodMode, kOneHitKill, kInfiniteGrenades,
              kCheckUpdates, kTouchSensitivity, kUnlockCharacters, kPs2Buttons,
-             kUnlockExtras, kInfiniteFatality, kMaxExperience, kMaxHealth, kMaxMana, kAspectRatio, kSkipCutscenes, kScreenFilter, kAntiAliasing };
+             kUnlockExtras, kInfiniteFatality, kMaxExperience, kMaxHealth, kMaxMana, kAspectRatio, kSkipCutscenes, kScreenFilter, kAntiAliasing,
+             kFrameSkip, kFpsPosition, kFpsTemps, kUltrawide, kStickMode, kBloom, kFog, kInfiniteEnergy, kDonate,
+             kGithub, kYoutube, kFpsUsage };
 
 using rows::Kind;
 using rows::Row;
@@ -245,6 +247,7 @@ constexpr Row kGraphicsRows[] = {
     {Kind::Heading, -1, "PERFORMANCE"},
     {Kind::Value, kVsync, "VERTICAL SYNC"},
     {Kind::Value, kMaxFps, "MAX FRAME RATE"},
+    {Kind::Value, kFrameSkip, "FRAME SKIP"},
     {Kind::Value, kFpsCounter, "FPS COUNTER"},
     {Kind::Heading, -1, "QUALITY"},
     {Kind::Value, kAniso, "ANISOTROPIC FILTERING"},
@@ -308,6 +311,7 @@ bool* ToggleFlag(Settings& s, int id) {
     switch (id) {
         case kVsync: return &s.vsync;
         case kFpsCounter: return &o.fps_counter;
+        case kFrameSkip: return &o.frame_skip;
         case kReloadBlur: return &o.reload_blur;
         case kSkipIntros: return &o.skip_intros;
         case kInvertMouse: return &o.invert_mouse;
