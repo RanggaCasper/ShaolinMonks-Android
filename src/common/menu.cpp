@@ -14,6 +14,7 @@
 
 #include <SDL3/SDL.h>
 #include <imgui.h>
+#include <imgui_internal.h>  // ClearActiveID, the drag scroll's
 
 #include "app/app.h"
 #include "audio/output.h"
@@ -22,6 +23,7 @@
 #include "common/menu.h"
 #include "common/mouse_keyboard.h"
 #include "common/options.h"
+#include "common/pad_binds.h"
 #include "common/translations.h"
 
 // native/gyro.cpp: aiming by turning the phone
@@ -285,7 +287,7 @@ constexpr Row kTouchRows[] = {
     {Kind::Value, kStickMode, "STICK MODE"},
     {Kind::Value, kTouchOpacity, "CONTROLS OPACITY"},
     {Kind::Value, kTouchSize, "CONTROLS SIZE"},
-    {Kind::Value, kTouchEdit, "EDIT CONTROLS POSITION"},
+    {Kind::Link, kTouchEdit, "EDIT CONTROLS POSITION"},
 };
 
 // LANGUAGE is the settings panel's: the game takes its own from the console's language
@@ -343,6 +345,17 @@ const std::vector<Row>& InputRows() {
         size_t count = 0;
         const input::Action* actions = input::Actions(&count);
         for (size_t i = 0; i < count; i++) out.push_back({Kind::Bind, int(i), actions[i].label});
+        return out;
+    }();
+    return list;
+}
+
+const std::vector<Row>& PadRows() {
+    static const std::vector<Row> list = [] {
+        std::vector<Row> out = {{Kind::Heading, -1, "CONTROLLER"}};
+        size_t count = 0;
+        const input::Action* actions = input::PadActions(&count);
+        for (size_t i = 0; i < count; i++) out.push_back({Kind::PadBind, int(i), actions[i].label});
         return out;
     }();
     return list;
@@ -536,11 +549,6 @@ void StepInputRow(int id, int step, char (&text)[64]) {
             if (step) touch::StepSize(step);
             std::snprintf(text, sizeof(text), "%u%%", touch::ControlsSize());
             break;
-        case kTouchEdit:
-            // any step opens the editor over the screen
-            if (step) touch::EditLayout();
-            std::snprintf(text, sizeof(text), "OPEN");
-            break;
         case kCheckUpdates:
             // any step asks; the answer comes in a dialog over the game
             if (step) host::CheckForUpdates();
@@ -591,12 +599,13 @@ std::string KeyText(std::string keys) {
 }
 
 // as options_menu.cpp's captions
-const char* const kPages[] = {"GRAPHICS", "TOUCH CONTROLS", "GENERAL", "KEYBOARD", "CREDITS"};
+const char* const kPages[] = {"GRAPHICS", "TOUCH CONTROLS", "GENERAL", "KEYBOARD", "CONTROLLER", "CREDITS"};
 constexpr int kSettingsPage = 0;
 constexpr int kTouchPage = 1;
 constexpr int kGeneralPage = 2;
 constexpr int kKeyboardPage = 3;
-constexpr int kCreditsPage = 4;
+constexpr int kControllerPage = 4;
+constexpr int kCreditsPage = 5;
 constexpr int kCheatsPage = -1;  // Black's weapon cheats, none here
 
 void RestoreDefaults(int page) {
@@ -622,6 +631,10 @@ void RestoreDefaults(int page) {
         input::ResetBindings();
         return;
     }
+    if (page == kControllerPage) {
+        input::ResetPadBindings();
+        return;
+    }
     game::Options keep = o;
     Get() = DefaultSettings();
     o = game::Options{};
@@ -630,6 +643,7 @@ void RestoreDefaults(int page) {
     o.hold_aim = keep.hold_aim;
     o.walk_speed = keep.walk_speed;
     o.keys = keep.keys;
+    o.pad = keep.pad;
     // the cheats page has its own defaults
     o.infinite_ammo = keep.infinite_ammo;
     o.rapid_fire = keep.rapid_fire;
@@ -647,6 +661,12 @@ int g_capture_slot = 0;  // its box: 0 the key, 1 the alternate
 int g_hovered_box = -1;  // the box under the mouse or focused with a key in it, this frame
 bool g_capture_armed = false;
 int g_capture_done = 0;  // frame of the last bind, the key that bound must not start another
+// the controller row being rebound, -1 when idle: as the keys', its inputs let go before the next press binds; Escape
+// or kPadCaptureMs with no press cancels, for a player with the controller alone
+std::atomic<int> g_pad_capture{-1};
+bool g_pad_capture_armed = false;
+std::chrono::steady_clock::time_point g_pad_capture_since;
+constexpr std::chrono::seconds kPadCaptureTimeout{5};
 int g_page = kSettingsPage;
 // the action's key and its alternate as their boxes show them, the alternate blank when there is none
 std::vector<std::string> KeyBoxes(size_t action) {
@@ -663,7 +683,8 @@ constexpr float kKeyBoxEms = 10.0f;  // a key box's width when the row has two
 
 // label left, a box per key right (the key and its alternate side by side), ending where the other rows' values do;
 // Enter or click starts a box's capture, right click or Delete sets `cleared`; returns the box, -1 for none
-int BindRow(const char* label, const std::vector<std::string>& keys, int capturing, int& cleared) {
+int BindRow(const char* label, const std::vector<std::string>& keys, int capturing, int& cleared,
+            const char* prompt = "PRESS A KEY") {
     const ImGuiStyle& style = ImGui::GetStyle();
     RowBox row = MeasureRow();
     float value_end = row.row_x + row.row_w - row.block_w + row.row_h + style.ItemSpacing.x + row.value_w;
@@ -686,7 +707,7 @@ int BindRow(const char* label, const std::vector<std::string>& keys, int capturi
                                                   ImGui::GetColorU32(lit ? ImGuiCol_Header : ImGuiCol_FrameBg));
         // key names as they are
         std::string value = keys[i];
-        if (capturing == i) value = Ui("PRESS A KEY");
+        if (capturing == i) value = Ui(prompt);
         else if (value == kUnbound) value = Ui(kUnbound);
         float pad = (box_w - ImGui::CalcTextSize(value.c_str()).x) * 0.5f;
         ImGui::SetCursorPos(ImVec2(x + std::max(pad, 0.0f), row.row_y));
@@ -715,8 +736,24 @@ void PollCapture() {
     g_capture_done = ImGui::GetFrameCount();
 }
 
+// any input of a controller binds once those held when it began are let go
+void PollPadCapture() {
+    if (g_pad_capture < 0) return;
+    std::string input = input::PressedPadInput();
+    bool cancel = ImGui::IsKeyPressed(ImGuiKey_Escape, false) ||
+                  std::chrono::steady_clock::now() - g_pad_capture_since > kPadCaptureTimeout;
+    if (!cancel && !g_pad_capture_armed) {
+        g_pad_capture_armed = input.empty();
+        return;
+    }
+    if (!cancel && input.empty()) return;
+    if (!cancel) input::PadBind(size_t(g_pad_capture.load()), input);
+    g_pad_capture = -1;
+    g_capture_done = ImGui::GetFrameCount();
+}
+
 // not under a bind or on the button that just bound
-bool CaptureFree() { return g_capture < 0 && ImGui::GetFrameCount() > g_capture_done + 1; }
+bool CaptureFree() { return g_capture < 0 && g_pad_capture < 0 && ImGui::GetFrameCount() > g_capture_done + 1; }
 
 void ValueRow(const Row& r) {
     int step = OptionRow(r.label, Ui(RowText(r.id, 0)).c_str());
@@ -732,7 +769,8 @@ const char* LinkUrl(int id) {
     }
 }
 
-// label left, OPEN right; a tap, click, Enter or A anywhere on the row opens the page in the browser
+// label left, OPEN right; a tap, click, Enter or A anywhere on the row opens the page in the browser, or the touch
+// layout's editor
 void LinkRow(const Row& r) {
     RowBox box = MeasureRow();
     ImGui::PushID(r.label);
@@ -749,8 +787,9 @@ void LinkRow(const Row& r) {
     ImGui::PopStyleColor();
     ImGui::PopID();
     EndRow(box);
-    if (open)
-        if (const char* url = LinkUrl(r.id)) SDL_OpenURL(url);
+    if (!open) return;
+    if (r.id == kTouchEdit) touch::EditLayout();
+    else if (const char* url = LinkUrl(r.id)) SDL_OpenURL(url);
 }
 
 // the role left, the name right-aligned at the row's end
@@ -780,6 +819,21 @@ void KeyRow(const Row& r) {
     g_capture_armed = false;
 }
 
+// the bound input, else the mapping's; a clear goes back to the mapping
+void PadRow(const Row& r) {
+    size_t count = 0;
+    const input::Action& action = input::PadActions(&count)[r.id];
+    std::string bound = input::PadBinding(size_t(r.id));
+    int cleared = -1;
+    int box = BindRow(r.label, {bound.empty() ? action.defaults : bound}, g_pad_capture == r.id ? 0 : -1, cleared,
+                      "PRESS A BUTTON");
+    if (cleared >= 0 && CaptureFree()) input::PadBind(size_t(r.id), "");
+    if (box < 0 || !CaptureFree()) return;
+    g_pad_capture = r.id;
+    g_pad_capture_armed = false;
+    g_pad_capture_since = std::chrono::steady_clock::now();
+}
+
 void DrawRows(int page) {
     size_t count = 0;
     const Row* list = rows::Page(page, &count);
@@ -789,12 +843,14 @@ void DrawRows(int page) {
         else if (r.kind == Kind::Value) ValueRow(r);
         else if (r.kind == Kind::Link) LinkRow(r);
         else if (r.kind == Kind::Info) InfoRow(r);
+        else if (r.kind == Kind::PadBind) PadRow(r);
         else KeyRow(r);
     }
 }
 
 void Defaults() {
     g_capture = -1;
+    g_pad_capture = -1;
     RestoreDefaults(g_page);
 }
 
@@ -820,6 +876,7 @@ void DrawTabs() {
                 if (!set && i != g_page) {
                     g_page = i;
                     g_capture = -1;
+                    g_pad_capture = -1;
                 }
                 ImGui::EndTabItem();
             }
@@ -845,7 +902,9 @@ void DrawFooter(float em) {
     ImGui::PushStyleColor(ImGuiCol_Text, kDim);
     const char* hint = "";
     if (g_capture >= 0) hint = "Press a key or mouse button to bind, Escape cancels";
+    else if (g_pad_capture >= 0) hint = "Press a button on the controller to bind, wait 5 seconds to cancel";
     else if (g_page == kKeyboardPage && g_hovered_box >= 0) hint = "Right click or Delete clears the key";
+    else if (g_page == kControllerPage && g_hovered_box >= 0) hint = "Right click or Delete restores the default";
     ImGui::TextUnformatted(Ui(hint, false).c_str());
     ImGui::PopStyleColor();
     float bw = em * 8;
@@ -859,6 +918,28 @@ void DrawFooter(float em) {
     if (ImGui::Button(Ui("Defaults", false).c_str(), ImVec2(bw, 0))) Defaults();
 }
 
+// The rows a finger drags up or down scroll with it, as a phone's lists do: the row it came down on is let go, so the
+// drag presses nothing. A drag of the scrollbar itself stays the scrollbar's.
+void DragScroll() {
+    static bool dragging = false;
+    const ImGuiIO& io = ImGui::GetIO();
+    if (!ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
+        dragging = false;
+        return;
+    }
+    ImGuiWindow* window = ImGui::GetCurrentWindow();
+    if (!dragging) {
+        bool touch = io.MouseSource == ImGuiMouseSource_TouchScreen;
+        bool inside = window->Rect().Contains(io.MouseClickedPos[ImGuiMouseButton_Left]);
+        bool scrollbar = ImGui::GetActiveID() == ImGui::GetWindowScrollbarID(window, ImGuiAxis_Y);
+        float moved = std::fabs(ImGui::GetMouseDragDelta(ImGuiMouseButton_Left, 0.0f).y);
+        dragging = touch && inside && !scrollbar && moved > ImGui::GetFontSize() * 0.6f;
+        if (!dragging) return;
+    }
+    ImGui::SetScrollY(ImGui::GetScrollY() - io.MouseDelta.y);
+    ImGui::ClearActiveID();
+}
+
 void DrawPanel() {
     const ImGuiViewport* vp = ImGui::GetMainViewport();
     float em = ImGui::GetFontSize();
@@ -869,6 +950,9 @@ void DrawPanel() {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 0.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(em * 1.6f, em * 1.2f));
+    // a scrollbar a thumb can take
+    ImGui::PushStyleVar(ImGuiStyleVar_ScrollbarSize, em * 1.4f);
+    ImGui::PushStyleVar(ImGuiStyleVar_GrabMinSize, em * 2.0f);
     constexpr ImGuiWindowFlags kFlags = ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse |
                                         ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoTitleBar;
     if (ImGui::Begin("##settings", nullptr, kFlags)) {
@@ -878,11 +962,12 @@ void DrawPanel() {
         ImGui::BeginChild("##rows", ImVec2(0, -footer), ImGuiChildFlags_NavFlattened);
         g_hovered_box = -1;
         DrawRows(g_page);
+        DragScroll();
         ImGui::EndChild();
         DrawFooter(em);
     }
     ImGui::End();
-    ImGui::PopStyleVar(4);
+    ImGui::PopStyleVar(6);
     ImGui::PopStyleColor(int(std::size(kPanelColors)));
 }
 
@@ -927,6 +1012,10 @@ const rows::Row* rows::Page(int page, size_t* count) {
         *count = InputRows().size();
         return InputRows().data();
     }
+    if (page == kControllerPage) {
+        *count = PadRows().size();
+        return PadRows().data();
+    }
     if (page == kCheatsPage) {
         *count = std::size(kCheatRows);
         return kCheatRows;
@@ -949,12 +1038,13 @@ const rows::Row* rows::Page(int page, size_t* count) {
 
 bool MenuOpen() { return g_open.load(std::memory_order_relaxed); }
 
-bool Capturing() { return g_capture >= 0; }
+bool Capturing() { return g_capture >= 0 || g_pad_capture >= 0; }
 
 void ToggleMenu() {
     bool open = !MenuOpen();
     g_open.store(open, std::memory_order_relaxed);
     g_capture = -1;
+    g_pad_capture = -1;
     if (open) input::ReleaseCursor();
 }
 
@@ -1032,6 +1122,7 @@ void DrawUi(double fps) {
     io.FontGlobalScale = std::max(1.0f, io.DisplaySize.y / 540.0f);
     if (MenuOpen()) {
         PollCapture();
+        PollPadCapture();
         DrawPanel();
     }
 }

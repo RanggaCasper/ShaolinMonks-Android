@@ -179,6 +179,10 @@ constexpr Entry kEntries[] = {
     {"KEYBOARD", {u"Clavier", u"Tastatur", u"Tastiera", u"Teclado", u"Keyboard"}},
     {"Press a key or mouse button to bind, Escape cancels", {u"Appuyez sur une touche ou un bouton de souris, Échap pour annuler", u"Taste oder Maustaste drücken, Escape bricht ab", u"Premi un tasto o un pulsante del mouse, Esc per annullare", u"Pulsa una tecla o un botón del ratón, Escape para cancelar", u"Tekan tombol keyboard atau mouse untuk mengatur, Escape untuk batal"}},
     {"Right click or Delete clears the key", {u"Clic droit ou Suppr pour effacer la touche", u"Rechtsklick oder Entf löscht die Taste", u"Clic destro o Canc per cancellare il tasto", u"Clic derecho o Supr para borrar la tecla", u"Klik kanan atau Delete untuk menghapus tombol"}},
+    {"CONTROLLER", {u"Manette", u"Controller", u"Controller", u"Mando", u"Controller"}},
+    {"PRESS A BUTTON", {u"Appuyez sur un bouton", u"Taste drücken", u"Premi un pulsante", u"Pulsa un botón", u"Tekan tombol"}},
+    {"Press a button on the controller to bind, wait 5 seconds to cancel", {u"Appuyez sur un bouton de la manette, attendez 5 secondes pour annuler", u"Controller-Taste drücken, 5 Sekunden warten bricht ab", u"Premi un pulsante del controller, attendi 5 secondi per annullare", u"Pulsa un botón del mando, espera 5 segundos para cancelar", u"Tekan tombol di controller untuk mengatur, tunggu 5 detik untuk batal"}},
+    {"Right click or Delete restores the default", {u"Clic droit ou Suppr pour rétablir la valeur par défaut", u"Rechtsklick oder Entf stellt den Standard wieder her", u"Clic destro o Canc per ripristinare il predefinito", u"Clic derecho o Supr para restaurar el predeterminado", u"Klik kanan atau Delete untuk kembali ke bawaan"}},
 
     // the touch layout editor
     {"RESET", {{}, {}, {}, {}, u"Atur ulang"}},

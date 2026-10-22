@@ -4,9 +4,11 @@
 
 #include <cfloat>
 #include <chrono>
+#include <cstdlib>
 
 #include <imgui.h>
 
+#include "common/menu.h"
 #include "host.h"
 
 namespace ui {
@@ -144,9 +146,17 @@ void NewFrame(float width, float height) {
         {ImGuiKey_GamepadDpadUp, SDL_GAMEPAD_BUTTON_DPAD_UP},    {ImGuiKey_GamepadDpadDown, SDL_GAMEPAD_BUTTON_DPAD_DOWN},
         {ImGuiKey_GamepadL1, SDL_GAMEPAD_BUTTON_LEFT_SHOULDER},  {ImGuiKey_GamepadR1, SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER},
     };
-    for (const Map& m : kMap) io.AddKeyEvent(m.key, SDL_GetGamepadButton(pad, m.button));
+    // a controller binding (the CONTROLLER page) takes the presses, and those held as it ended wait for release
+    static bool held_off = false;
+    bool any = false;
+    for (const Map& m : kMap) any |= SDL_GetGamepadButton(pad, m.button);
+    for (SDL_GamepadAxis a : {SDL_GAMEPAD_AXIS_LEFTX, SDL_GAMEPAD_AXIS_LEFTY})
+        any |= std::abs(SDL_GetGamepadAxis(pad, a)) > 9830;
+    if (app::Capturing()) held_off = true;
+    else if (!any) held_off = false;
+    for (const Map& m : kMap) io.AddKeyEvent(m.key, !held_off && SDL_GetGamepadButton(pad, m.button));
     auto stick = [&](ImGuiKey neg, ImGuiKey pos, SDL_GamepadAxis a) {
-        float v = SDL_GetGamepadAxis(pad, a) / 32767.0f;
+        float v = held_off ? 0 : SDL_GetGamepadAxis(pad, a) / 32767.0f;
         io.AddKeyAnalogEvent(neg, v < -0.3f, v < -0.3f ? -v : 0);
         io.AddKeyAnalogEvent(pos, v > 0.3f, v > 0.3f ? v : 0);
     };

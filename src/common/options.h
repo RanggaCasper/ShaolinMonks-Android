@@ -61,6 +61,7 @@ struct Options {
     bool unlock_extras = false;  // cheat: every unlockable of the Kontent menu (art, films, costumes, arenas)
     bool ps2_buttons = false;  // the touch controls and the game's button prompts show the PS2's buttons
     std::map<std::string, std::string> keys;  // action id to key names, absent is the default
+    std::map<std::string, std::string> pad;   // action id to a controller's input, absent is SDL's mapping
 };
 Options& Opt();
 // the language setting as this run started, the language the game boots in

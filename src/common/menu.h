@@ -7,7 +7,7 @@
 namespace app {
 
 bool MenuOpen();
-bool Capturing();  // a key binding waits for a key
+bool Capturing();  // a key or controller binding waits for its input
 void ToggleMenu();
 void DrawUi(double fps);
 inline constexpr uint32_t kFpsCapRefresh = 1;  // Settings::fps_cap: just under the display's refresh rate
@@ -16,14 +16,14 @@ void PaceFrame();  // app::Pace, with kFpsCapRefresh; game thread, after the pre
 // the panel's rows, for the game's own options menu
 namespace rows {
 
-// a link row opens its page on a tap, an info row is a line of plain text
-enum class Kind { Heading, Value, Bind, Link, Info };
+// a link row opens its page on a tap, an info row is a line of plain text; PadBind binds a controller's input
+enum class Kind { Heading, Value, Bind, Link, Info, PadBind };
 struct Row {
     Kind kind;
     int id;  // a bind row's input action
     const char* label;
 };
-// 0 graphics, 1 touch controls, 2 general, 3 mouse and keyboard, 4 credits
+// 0 graphics, 1 touch controls, 2 general, 3 mouse and keyboard, 4 controller, 5 credits
 const Row* Page(int page, size_t* count);
 
 }  // namespace rows

@@ -5,6 +5,7 @@
 #include "common/menu.h"
 #include "common/mouse_keyboard.h"
 #include "common/options.h"
+#include "common/pad_binds.h"
 
 namespace game {
 
@@ -37,12 +38,16 @@ void Load(const void* table) {
     if (const toml::table* keys = t["keys"].as_table())
         for (auto&& [id, value] : *keys)
             if (auto v = value.value<std::string>()) o.keys[std::string(id.str())] = *v;
+    if (const toml::table* pad = t["pad"].as_table())
+        for (auto&& [id, value] : *pad)
+            if (auto v = value.value<std::string>()) o.pad[std::string(id.str())] = *v;
 }
 
 // after the settings load, before boot
 void Init() {
     BootLanguage();  // latched before the options can change the setting
     input::LoadBindings();
+    input::LoadPadBindings();
     audio::SetOutputMode(Opt().audio_output);
 }
 
@@ -55,6 +60,9 @@ void Save(void* table) {
     toml::table keys;
     for (const auto& [id, value] : o.keys) keys.insert(id, value);
     t.insert("keys", keys);
+    toml::table pad;
+    for (const auto& [id, value] : o.pad) pad.insert(id, value);
+    t.insert("pad", pad);
 }
 
 }  // namespace
