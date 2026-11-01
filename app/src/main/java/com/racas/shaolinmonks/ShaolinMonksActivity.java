@@ -323,6 +323,15 @@ public class ShaolinMonksActivity extends SDLActivity {
         return out;
     }
 
+    // the same folders for native/game_files.cpp, from the game's thread: some phones (a Sony on Android 11) don't let
+    // the app list /storage, though each card's folder opens
+    public String[] cardFolderPaths() {
+        List<File> cards = cardFolders();
+        String[] out = new String[cards.size()];
+        for (int i = 0; i < out.length; i++) out[i] = cards.get(i).getPath();
+        return out;
+    }
+
     // the newer release, once the app is in front with no other dialog up; shown once a run
     private void tellOfUpdate() {
         if (update == null || importing || !resumed || isFinishing() || (dialog != null && dialog.isShowing())) return;

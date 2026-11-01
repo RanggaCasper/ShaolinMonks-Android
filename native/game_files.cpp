@@ -1,7 +1,10 @@
 // The game on Android: its files or a disc image (.iso) in the ShaolinMonks folder on the phone's storage or on an SD
 // card (all files access granted) or in the app's own assets folder. The xbe must be the one this build was recompiled
 // from: the disc's USA and Europe releases share it.
+#include <jni.h>
+
 #include <SDL3/SDL.h>
+#include <SDL3/SDL_system.h>
 
 #include <algorithm>
 #include <cctype>
@@ -26,18 +29,54 @@ namespace fs = std::filesystem;
 constexpr const char* kShared = "/storage/emulated/0/ShaolinMonks";
 constexpr const char* kVolumes = "/storage";
 
-// the ShaolinMonks folder on each SD card or USB stick Android has mounted, /storage/<volume id>/ShaolinMonks; all
-// files access
-// reads them as it does the phone's own storage
-std::vector<fs::path> RemovableFolders() {
+// the ShaolinMonks folders ShaolinMonksActivity has from Android's storage volumes, which some phones don't show in
+// /storage
+std::vector<fs::path> ActivityCardFolders() {
     std::vector<fs::path> out;
-    std::error_code ec;
+    auto* env = static_cast<JNIEnv*>(SDL_GetAndroidJNIEnv());
+    auto activity = static_cast<jobject>(SDL_GetAndroidActivity());
+    if (!env || !activity) return out;
+    jclass cls = env->GetObjectClass(activity);
+    jmethodID m = env->GetMethodID(cls, "cardFolderPaths", "()[Ljava/lang/String;");
+    auto paths = m ? static_cast<jobjectArray>(env->CallObjectMethod(activity, m)) : nullptr;
+    if (env->ExceptionCheck()) {
+        env->ExceptionClear();
+        paths = nullptr;
+    }
+    for (jsize i = 0, n = paths ? env->GetArrayLength(paths) : 0; i < n; i++) {
+        auto s = static_cast<jstring>(env->GetObjectArrayElement(paths, i));
+        if (!s) continue;
+        const char* c = env->GetStringUTFChars(s, nullptr);
+        if (c) {
+            out.emplace_back(c);
+            env->ReleaseStringUTFChars(s, c);
+        }
+        env->DeleteLocalRef(s);
+    }
+    if (paths) env->DeleteLocalRef(paths);
+    env->DeleteLocalRef(cls);
+    env->DeleteLocalRef(activity);
+    return out;
+}
+
+// the ShaolinMonks folder on each SD card or USB stick Android has mounted, /storage/<volume id>/ShaolinMonks; all
+// files access reads them as it does the phone's own storage
+std::vector<fs::path> RemovableFolders() {
+    std::vector<fs::path> out = ActivityCardFolders();
+    // an entry's own error apart from the listing's: one that is no folder must not end the walk
+    std::error_code ec, dir_ec;
     for (auto& e : fs::directory_iterator(kVolumes, ec)) {
         std::string name = e.path().filename().string();
-        if (name == "emulated" || name == "self" || !e.is_directory(ec)) continue;
+        if (name == "emulated" || name == "self" || !e.is_directory(dir_ec)) continue;
         out.push_back(e.path() / "ShaolinMonks");
     }
+    static bool logged = false;
+    if (ec && !logged) {
+        LOGW("game: %s cannot be listed: %s", kVolumes, ec.message().c_str());
+        logged = true;
+    }
     std::sort(out.begin(), out.end());
+    out.erase(std::unique(out.begin(), out.end()), out.end());
     return out;
 }
 
