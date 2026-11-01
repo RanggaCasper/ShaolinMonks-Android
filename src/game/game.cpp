@@ -8,6 +8,7 @@
 #include "common/options.h"
 #include "cpu/x86_context.h"
 #include "kernel/kernel.h"
+#include "netplay.h"
 
 namespace game {
 
@@ -48,14 +49,21 @@ void FrameSkip(X86Context&, uint8_t*) {
     static clock::time_point due;
     static int skips = 0;
     auto now = clock::now();
-    if (!game::Opt().frame_skip) {
+    const bool on = game::Opt().frame_skip;
+    bool late = false;
+    if (on) {
+        // ahead of the clock carries no credit: the pacing at the present keeps 60
+        if (due > now || now - due > kMaxLag) due = now;
+        late = now - due >= kStep && skips < kMaxSkips;
+    } else {
         due = now;  // turned on again, it starts from here
         skips = 0;
-        return;
     }
-    // ahead of the clock carries no credit: the pacing at the present keeps 60
-    if (due > now || now - due > kMaxLag) due = now;
-    if (now - due >= kStep && skips < kMaxSkips) kernel::W32(kSkipDraw, 1);
+    // netplay first: it may wait for the friend's pad. This phone's own clock decides the skip: sharing it made the
+    // faster phone skip as often as the slower one, and the game's own PAL skip leaves the world's steps as they are
+    netplay::Step();
+    if (!on) return;
+    if (late) kernel::W32(kSkipDraw, 1);
     skips = kernel::R32(kSkipDraw) ? skips + 1 : 0;
     due += kStep;
 }

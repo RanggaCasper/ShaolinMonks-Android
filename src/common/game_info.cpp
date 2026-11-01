@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <toml++/toml.hpp>
 
 #include "app/app.h"
@@ -6,6 +7,7 @@
 #include "common/mouse_keyboard.h"
 #include "common/options.h"
 #include "common/pad_binds.h"
+#include "netplay.h"
 
 namespace game {
 
@@ -17,10 +19,12 @@ void Pad(int port, input::Pad& pad) {
     if (port == 0) pad.connected = true;
     if (app::MenuOpen()) pad = input::Pad{.connected = pad.connected};
     else if (port == 0) input::Keyboard(pad);
+    netplay::Filter(port, pad);  // last: the phone's own port 0 is what the friend gets, then both ports are the trade's
 }
 
 // no vibration while the keyboard and mouse are in use
 void Rumble(int port, uint16_t& left, uint16_t& right) {
+    netplay::Rumble(port, left, right);
     if (port != 0 || !input::KeyboardActive()) return;
     left = 0;
     right = 0;
@@ -35,6 +39,19 @@ void Load(const void* table) {
     o.touch_sensitivity = float(t["touch_sensitivity"].value_or(double(o.mouse_sensitivity)));
     std::string language = t["language"].value_or(o.language);
     if (KnownLanguage(language)) o.language = language;
+    o.netplay_address = t["netplay_address"].value_or(o.netplay_address);
+    o.netplay_port = uint32_t(std::clamp<int64_t>(t["netplay_port"].value_or<int64_t>(o.netplay_port), 1024, 65535));
+    o.netplay_delay = uint32_t(std::clamp<int64_t>(t["netplay_delay"].value_or<int64_t>(o.netplay_delay), 1, 12));
+    o.netplay_copy_save = t["netplay_copy_save"].value_or(o.netplay_copy_save);
+    o.netplay_auto_rng = t["netplay_auto_rng"].value_or(o.netplay_auto_rng);
+    o.netplay_diag = t["netplay_diag"].value_or(o.netplay_diag);
+    o.netplay_state_copy = t["netplay_state_copy"].value_or(o.netplay_state_copy);
+    for (auto [key, list] : {std::pair{"netplay_sync", &o.netplay_sync}, std::pair{"netplay_hash", &o.netplay_hash}})
+        if (const toml::array* a = t[key].as_array()) {
+            list->clear();
+            for (auto&& item : *a)
+                if (auto v = item.value<std::string>()) list->push_back(*v);
+        }
     if (const toml::table* keys = t["keys"].as_table())
         for (auto&& [id, value] : *keys)
             if (auto v = value.value<std::string>()) o.keys[std::string(id.str())] = *v;
@@ -57,6 +74,18 @@ void Save(void* table) {
     t.insert("mouse_sensitivity", double(o.mouse_sensitivity));
     t.insert("touch_sensitivity", double(o.touch_sensitivity));
     t.insert("language", o.language);
+    t.insert("netplay_address", o.netplay_address);
+    t.insert("netplay_port", int64_t(o.netplay_port));
+    t.insert("netplay_delay", int64_t(o.netplay_delay));
+    t.insert("netplay_copy_save", o.netplay_copy_save);
+    t.insert("netplay_auto_rng", o.netplay_auto_rng);
+    t.insert("netplay_diag", o.netplay_diag);
+    t.insert("netplay_state_copy", o.netplay_state_copy);
+    toml::array sync, hash;
+    for (const std::string& v : o.netplay_sync) sync.push_back(v);
+    for (const std::string& v : o.netplay_hash) hash.push_back(v);
+    t.insert("netplay_sync", sync);
+    t.insert("netplay_hash", hash);
     toml::table keys;
     for (const auto& [id, value] : o.keys) keys.insert(id, value);
     t.insert("keys", keys);

@@ -25,6 +25,7 @@
 #include "common/options.h"
 #include "common/pad_binds.h"
 #include "common/translations.h"
+#include "netplay.h"
 
 // native/gyro.cpp: aiming by turning the phone
 namespace gyro {
@@ -599,13 +600,14 @@ std::string KeyText(std::string keys) {
 }
 
 // as options_menu.cpp's captions
-const char* const kPages[] = {"GRAPHICS", "TOUCH CONTROLS", "GENERAL", "KEYBOARD", "CONTROLLER", "CREDITS"};
+const char* const kPages[] = {"GRAPHICS", "TOUCH CONTROLS", "GENERAL", "KEYBOARD", "CONTROLLER", "CREDITS", "NETPLAY"};
 constexpr int kSettingsPage = 0;
 constexpr int kTouchPage = 1;
 constexpr int kGeneralPage = 2;
 constexpr int kKeyboardPage = 3;
 constexpr int kControllerPage = 4;
 constexpr int kCreditsPage = 5;
+constexpr int kNetplayPage = 6;  // the panel's own: the game's options menu has no page for it
 constexpr int kCheatsPage = -1;  // Black's weapon cheats, none here
 
 void RestoreDefaults(int page) {
@@ -635,6 +637,15 @@ void RestoreDefaults(int page) {
         input::ResetPadBindings();
         return;
     }
+    if (page == kNetplayPage) {
+        game::Options none;
+        o.netplay_address = none.netplay_address;
+        o.netplay_port = none.netplay_port;
+        o.netplay_delay = none.netplay_delay;
+        o.netplay_copy_save = none.netplay_copy_save;
+        Changed();
+        return;
+    }
     game::Options keep = o;
     Get() = DefaultSettings();
     o = game::Options{};
@@ -644,6 +655,12 @@ void RestoreDefaults(int page) {
     o.walk_speed = keep.walk_speed;
     o.keys = keep.keys;
     o.pad = keep.pad;
+    o.netplay_address = keep.netplay_address;
+    o.netplay_port = keep.netplay_port;
+    o.netplay_delay = keep.netplay_delay;
+    o.netplay_copy_save = keep.netplay_copy_save;
+    o.netplay_sync = keep.netplay_sync;
+    o.netplay_hash = keep.netplay_hash;
     // the cheats page has its own defaults
     o.infinite_ammo = keep.infinite_ammo;
     o.rapid_fire = keep.rapid_fire;
@@ -834,7 +851,94 @@ void PadRow(const Row& r) {
     g_pad_capture_since = std::chrono::steady_clock::now();
 }
 
+// a row of one word that does something when it is tapped, like a link row
+bool ActionRow(const char* label, const char* action) {
+    RowBox box = MeasureRow();
+    ImGui::PushID(label);
+    bool pressed = ImGui::Selectable("##action", false, ImGuiSelectableFlags_AllowOverlap, ImVec2(box.row_w, box.row_h));
+    if (ImGui::IsItemFocused() || ImGui::IsItemHovered()) FillItem();
+    RowLabel(box, label);
+    std::string value = Ui(action);
+    float value_x = box.row_x + box.row_w - box.block_w + box.row_h + ImGui::GetStyle().ItemSpacing.x;
+    float pad = (box.value_w - ImGui::CalcTextSize(value.c_str()).x) * 0.5f;
+    ImGui::SetCursorPos(ImVec2(value_x + std::max(pad, 0.0f), box.row_y));
+    ImGui::AlignTextToFramePadding();
+    ImGui::PushStyleColor(ImGuiCol_Text, kHeading);
+    ImGui::TextUnformatted(value.c_str());
+    ImGui::PopStyleColor();
+    ImGui::PopID();
+    EndRow(box);
+    return pressed;
+}
+
+// the host's address, typed: a guest joins it. The phone's keyboard comes up with the field.
+void AddressRow() {
+    static char text[64];
+    static bool loaded = false;
+    if (!loaded) {
+        std::snprintf(text, sizeof text, "%s", game::Opt().netplay_address.c_str());
+        loaded = true;
+    }
+    RowBox box = MeasureRow();
+    RowLabel(box, "HOST ADDRESS");
+    ImGui::SetCursorPos(ImVec2(box.row_x + box.row_w - box.block_w, box.row_y));
+    ImGui::SetNextItemWidth(box.block_w);
+    ImGui::PushID("netplay_address");
+    if (ImGui::InputTextWithHint("##address", "192.168.1.5", text, sizeof text)) game::Opt().netplay_address = text;
+    SDL_Window* window = static_cast<SDL_Window*>(Window());
+    if (ImGui::IsItemActivated() && window) SDL_StartTextInput(window);
+    if (ImGui::IsItemDeactivated()) {
+        if (window) SDL_StopTextInput(window);
+        Save();
+    }
+    ImGui::PopID();
+    EndRow(box);
+}
+
+// co-op over the network: the host's phone is player 1, the guest's player 2 (native/netplay.cpp)
+void DrawNetplayPage() {
+    game::Options& o = game::Opt();
+    bool idle = netplay::GetState() == netplay::State::Off;
+    Section("SESSION");
+    std::string status = netplay::Status();
+    if (!status.empty()) {
+        ImGui::PushStyleColor(ImGuiCol_Text, netplay::InSync() ? kHeading : ImVec4(1.0f, 0.4f, 0.3f, 1.0f));
+        ImGui::TextWrapped("%s", status.c_str());
+        ImGui::PopStyleColor();
+    }
+    if (idle) {
+        if (ActionRow("HOST A GAME", "START")) netplay::Host();
+        AddressRow();
+        if (ActionRow("JOIN A GAME", "JOIN")) netplay::Join(o.netplay_address);
+    } else if (ActionRow("SESSION", "DISCONNECT")) {
+        netplay::Stop();
+    }
+    Section("OPTIONS");
+    char text[64];
+    std::snprintf(text, sizeof text, "%u", o.netplay_delay);
+    if (int step = OptionRow("INPUT DELAY (FRAMES)", text)) {
+        o.netplay_delay = uint32_t(StepRange(int(o.netplay_delay), 1, 12, 1, step));
+        Save();
+    }
+    std::snprintf(text, sizeof text, "%u", o.netplay_port);
+    if (int step = OptionRow("PORT", text)) {
+        o.netplay_port = uint32_t(StepRange(int(o.netplay_port), 1024, 65535, 1, step));
+        Save();
+    }
+    if (int step = OptionRow("COPY HOST SAVES ON JOIN", Ui(OnOff(o.netplay_copy_save)).c_str())) {
+        Flip(o.netplay_copy_save, step);
+        Save();
+    }
+    Section("HOW TO");
+    ImGui::TextWrapped(
+        "Both phones on the same Wi-Fi. The host taps START and tells the friend the address shown above. The friend "
+        "types it and taps JOIN, then the host's saves are copied over theirs (the friend's are kept in "
+        "hdd.netplay-backup). Both then start the same co-op game, and play begins when both are in the level. The "
+        "delay and port are the host's.");
+}
+
 void DrawRows(int page) {
+    if (page == kNetplayPage) return DrawNetplayPage();
     size_t count = 0;
     const Row* list = rows::Page(page, &count);
     for (size_t i = 0; i < count; i++) {
@@ -1111,9 +1215,21 @@ void DrawFpsCounter(double fps) {
     if (!perf.empty()) DrawShadowed(dl, small, ImVec2(x(ps.x), y + fs.y), IM_COL32(235, 235, 235, 255), perf.c_str());
 }
 
+// the session's line at the top of the picture while one is up
+void DrawNetplayOverlay() {
+    if (netplay::GetState() == netplay::State::Off) return;
+    std::string text = "NETPLAY: " + netplay::Status();
+    ImDrawList* list = ImGui::GetForegroundDrawList();
+    ImVec2 size = ImGui::CalcTextSize(text.c_str());
+    float x = (ImGui::GetIO().DisplaySize.x - size.x) * 0.5f;
+    list->AddRectFilled(ImVec2(x - 6, 2), ImVec2(x + size.x + 6, size.y + 6), IM_COL32(0, 0, 0, 150));
+    list->AddText(ImVec2(x, 4), netplay::InSync() ? IM_COL32(235, 235, 235, 230) : IM_COL32(255, 90, 70, 255), text.c_str());
+}
+
 void DrawUi(double fps) {
     game::g_fps = float(fps);
     DrawFpsCounter(fps);
+    DrawNetplayOverlay();
     ImGuiIO& io = ImGui::GetIO();
     if (MenuOpen()) io.ConfigFlags &= ~ImGuiConfigFlags_NoMouseCursorChange;
     else io.ConfigFlags |= ImGuiConfigFlags_NoMouseCursorChange;
